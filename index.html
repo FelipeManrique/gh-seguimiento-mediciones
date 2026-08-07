@@ -226,11 +226,10 @@
 <div id="modalOverlay">
   <div id="modalCard">
     <h2>Nueva medición</h2>
-    <p class="hint">Adjuntá el PDF de la cotización ya aceptada por el cliente. El sistema saca solo la empresa, el Presupuesto GH y las mediciones, y las carga en la planilla y en este dashboard.</p>
+    <p class="hint">Adjuntá el Word de la cotización ya aceptada por el cliente. El sistema saca solo la empresa, el Presupuesto GH y las mediciones, y las carga en la planilla y en este dashboard.</p>
     <div class="field">
-      <label for="nmArchivo">Cotización (PDF o Word)</label>
-      <input type="file" id="nmArchivo" accept="application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-      <p class="hint" style="margin:6px 0 0;">Si existe la versión Word (antes de exportarla a PDF), esa da un resultado más prolijo.</p>
+      <label for="nmArchivo">Cotización (Word)</label>
+      <input type="file" id="nmArchivo" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
     </div>
     <div id="modalStatus"></div>
     <div id="modalActions">
@@ -325,6 +324,10 @@
   /* ---------- helpers de etapa ---------- */
 
   function etapaDe(servicio) {
+    // Marcada a mano como terminada = el ciclo completo ya se cumplió (se
+    // entregó, se facturó, se envió), aunque el seguimiento paso a paso nunca
+    // se haya llenado. Cuenta como Entregado en el resumen.
+    if (!servicio.esNuevo && servicio.checklist.terminadoManual) return 'entregado';
     if (!servicio.fechaMuestreo) return 'ingreso';
     var todasConInforme = servicio.mediciones.length > 0 && servicio.mediciones.every(function (m) { return !!m.entregaInforme; });
     if (!todasConInforme) {
@@ -691,12 +694,12 @@
   });
 
   var MIME_COTIZACION_PERMITIDOS = [
-    'application/pdf', 'application/msword',
+    'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ];
   var ERROR_CARGA_COTIZACION = {
-    falta_el_archivo: 'Elegí el PDF o Word de la cotización.',
-    formato_no_soportado: 'Ese formato no se puede leer. Subí un PDF o un Word (.doc/.docx).',
+    falta_el_archivo: 'Elegí el Word de la cotización.',
+    formato_no_soportado: 'Ese formato no se puede leer. Subí el Word (.doc/.docx).',
     no_se_pudieron_extraer_los_datos_clave: 'No se pudo identificar la empresa o el número de Presupuesto GH en ese archivo. Revisá que la cotización tenga los campos "Referencia" y "EMPRESA" como en el formato habitual.'
   };
 
@@ -715,12 +718,12 @@
     var status = document.getElementById('modalStatus');
 
     if (!file) {
-      status.textContent = 'Elegí el PDF o Word de la cotización.';
+      status.textContent = 'Elegí el Word de la cotización.';
       status.className = 'err';
       return;
     }
     if (MIME_COTIZACION_PERMITIDOS.indexOf(file.type) === -1) {
-      status.textContent = 'El archivo tiene que ser un PDF o un Word (.doc/.docx).';
+      status.textContent = 'El archivo tiene que ser un Word (.doc/.docx).';
       status.className = 'err';
       return;
     }
