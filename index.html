@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard de Seguimiento de Mediciones — GH Consultora</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
+    --amarillo:   #b8860b; --amarillo-bg:#fbf1d6;
+    --naranja:    #c56a15; --naranja-bg: #fbe6d2;
+    --rojo:       #b3261e; --rojo-bg:    #f9e0de;
+    --azul:       #2f6f9e; --azul-bg:    #e2eef6;
+    --gris:       #6b7280; --gris-bg:    #eceff1;
+    --ink:        #2b2f26; --ink-soft:   #5b6058;
+    --line:       #dfe3da; --bg:         #f7f8f4; --card:#ffffff;
+    --brand-dark: #4a7a1e; --brand: #8dc63f; --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  a{color:inherit;}
+
+  #loginScreen{ min-height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:18px; text-align:center; padding:24px; }
+  #loginScreen .logo{ font-weight:800; font-size:40px; letter-spacing:-1px;
+    background:linear-gradient(135deg, var(--brand-dark), var(--brand));
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #loginScreen h1{ font-size:20px; margin:0; }
+  #loginScreen p{ color:var(--ink-soft); font-size:14px; max-width:380px; margin:0; }
+  #loginError{ color:var(--rojo); font-size:13.5px; font-weight:600; display:none; max-width:380px; }
+  #loginSpinner{ display:none; color:var(--ink-soft); font-size:13px; }
+
+  #dashboardScreen{ display:none; }
+  header{ background:linear-gradient(180deg, #ffffff 0%, #f2f6ec 100%); border-bottom:1px solid var(--line);
+    padding:20px 28px; display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+  .brand{ display:flex; align-items:center; gap:16px; }
+  .logo-wrap{ width:56px;height:56px;flex:0 0 auto;display:flex;align-items:center;justify-content:center; }
+  .logo-wrap img{max-width:100%;max-height:100%;display:block;}
+  .logo-fallback{ font-weight:800; font-size:26px; letter-spacing:-1px;
+    background:linear-gradient(135deg, var(--brand-dark), var(--brand)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .brand-text h1{ font-size:19px; margin:0 0 2px 0; font-weight:700; }
+  .brand-text .sub{ font-size:12.5px; color:var(--ink-soft); font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+  .account{ text-align:right; font-size:13px; color:var(--ink-soft); }
+  .account b{color:var(--brand-dark);font-size:14px;display:block;}
+  .account button{ margin-top:4px; border:none; background:none; color:var(--ink-soft); text-decoration:underline; cursor:pointer; font-size:12px; padding:0; }
+
+  main{max-width:1160px;margin:0 auto;padding:22px 28px 60px;}
+
+  .stats{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px; }
+  .stat{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; cursor:pointer; }
+  .stat:hover{box-shadow:0 3px 10px rgba(0,0,0,.06);}
+  .stat.active{outline:2px solid var(--brand-dark);}
+  .stat .n{font-size:26px;font-weight:800;line-height:1;}
+  .stat .l{font-size:12px;color:var(--ink-soft);margin-top:4px;font-weight:600;}
+  .stat.tot .n{color:var(--ink);} .stat.gris .n{color:var(--gris);} .stat.amarillo .n{color:var(--amarillo);}
+  .stat.naranja .n{color:var(--naranja);} .stat.verde .n{color:var(--verde);}
+
+  .legend{ display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;background:var(--card);
+    border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin-bottom:20px;font-size:12.5px;color:var(--ink-soft); }
+  .legend b{color:var(--ink);margin-right:2px;}
+  .chip{display:inline-flex;align-items:center;gap:6px;}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
+  .dot.verde{background:var(--verde);} .dot.amarillo{background:var(--amarillo);} .dot.naranja{background:var(--naranja);}
+  .dot.rojo{background:var(--rojo);} .dot.gris{background:var(--gris);} .dot.azul{background:var(--azul);}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap;}
+  .search{flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;background:var(--card);color:var(--ink);}
+  .btn{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
+  .btn:hover{border-color:var(--brand-dark);color:var(--brand-dark);}
+
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;}
+  .badge.verde{background:var(--verde-bg);color:var(--verde);} .badge.amarillo{background:var(--amarillo-bg);color:var(--amarillo);}
+  .badge.naranja{background:var(--naranja-bg);color:var(--naranja);} .badge.rojo{background:var(--rojo-bg);color:var(--rojo);}
+  .badge.gris{background:var(--gris-bg);color:var(--gris);} .badge.azul{background:var(--azul-bg);color:var(--azul);}
+
+  .servicio{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; }
+  .servicio-head{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 16px; cursor:pointer; flex-wrap:wrap; }
+  .servicio-head:hover{background:#f3f7ee;}
+  :root[data-theme="dark"] .servicio-head:hover{background:#1d2216;}
+  .servicio-empresa{font-weight:700;font-size:14.5px;}
+  .servicio-meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .servicio-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;}
+  .progreso{font-size:11.5px;color:var(--ink-soft);}
+  .chev{font-size:12px;color:var(--ink-soft);transition:transform .15s;}
+  .servicio.open .chev{transform:rotate(90deg);}
+  .servicio-body{display:none;border-top:1px solid var(--line);padding:16px;}
+  .servicio.open .servicio-body{display:block;}
+
+  .medtable{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12.5px;}
+  .medtable th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);padding:6px 8px;border-bottom:1px solid var(--line);}
+  .medtable td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
+  .medtable tr:last-child td{border-bottom:none;}
+
+  .checklist-title{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);font-weight:700;margin:4px 0 10px;}
+  .checklist{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 20px;}
+  @media (max-width:720px){ .checklist{grid-template-columns:1fr;} .stats{grid-template-columns:repeat(2,1fr);} }
+  .check-item{display:flex;align-items:flex-start;gap:8px;font-size:13px;}
+  .check-item input[type="checkbox"]{margin-top:2px;width:16px;height:16px;accent-color:var(--brand-dark);}
+  .check-item .field-inputs{display:flex;gap:6px;flex:1;flex-wrap:wrap;}
+  .check-item input[type="text"], .check-item input[type="date"]{flex:1;min-width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;background:var(--card);color:var(--ink);}
+  .check-item label{flex:1;}
+  .sin-presupuesto{font-size:12px;color:var(--ink-soft);font-style:italic;padding:6px 0;}
+
+  footer{max-width:1160px;margin:0 auto;padding:6px 28px 40px;font-size:11.5px;color:var(--ink-soft);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#14170f; --card:#1c211a; --ink:#eef0e8; --ink-soft:#a7ad9d; --line:#2a2f24;
+      --verde-bg:#1d2b16; --amarillo-bg:#2b230f; --naranja-bg:#2b1f10; --rojo-bg:#2b1513; --gris-bg:#22261f; --azul-bg:#132430; }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14170f; --card:#1c211a; --ink:#eef0e8; --ink-soft:#a7ad9d; --line:#2a2f24;
+    --verde-bg:#1d2b16; --amarillo-bg:#2b230f; --naranja-bg:#2b1f10; --rojo-bg:#2b1513; --gris-bg:#22261f; --azul-bg:#132430;
+  }
+  :root[data-theme="light"]{
+    --bg:#f7f8f4; --card:#ffffff; --ink:#2b2f26; --ink-soft:#5b6058; --line:#dfe3da;
+    --verde-bg:#eaf4e2; --amarillo-bg:#fbf1d6; --naranja-bg:#fbe6d2; --rojo-bg:#f9e0de; --gris-bg:#eceff1; --azul-bg:#e2eef6;
+  }
+  @media (prefers-color-scheme: dark){ header{background:linear-gradient(180deg,#181c13 0%, #14170f 100%);} }
+  :root[data-theme="dark"] header{background:linear-gradient(180deg,#181c13 0%, #14170f 100%);}
+  :root[data-theme="light"] header{background:linear-gradient(180deg, #ffffff 0%, #f2f6ec 100%);}
+
+  #themeToggle{
+    position:fixed; top:16px; right:16px; z-index:60;
+    display:flex; align-items:center; gap:6px;
+    background:var(--card); border:1px solid var(--line); border-radius:999px;
+    padding:6px 12px; font-size:13px; font-weight:600; color:var(--ink-soft);
+    cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.08);
+  }
+  #themeToggle:hover{border-color:var(--brand-dark); color:var(--brand-dark);}
+</style>
+</head>
+<body>
+
+<button id="themeToggle" type="button" aria-label="Cambiar tema claro/oscuro"></button>
+
+<div id="loginScreen">
+  <div class="logo">GH</div>
+  <h1>Seguimiento de Mediciones</h1>
+  <p>GH Consultora · Mediciones y Monitoreos<br>Iniciá sesión con una cuenta de Google autorizada para ver el estado de cada servicio, del ingreso a la entrega.</p>
+  <div id="gsiButton"></div>
+  <div id="loginSpinner">Verificando acceso...</div>
+  <div id="loginError"></div>
+</div>
+
+<div id="dashboardScreen">
+  <header>
+    <div class="brand">
+      <div class="logo-wrap">
+        <img src="logo_gh.png" alt="GH Consultora" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+        <div class="logo-fallback" style="display:none;">GH</div>
+      </div>
+      <div class="brand-text">
+        <h1>Seguimiento de Mediciones</h1>
+        <div class="sub">Del ingreso a la entrega</div>
+      </div>
+    </div>
+    <div class="account">
+      <b id="accountEmail"></b>
+      GH Consultora · Mediciones y Monitoreos
+      <button id="signOutBtn">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="stats" id="stats">
+      <div class="stat tot" data-filter="todos"><div class="n" id="stTodos">0</div><div class="l">Total servicios</div></div>
+      <div class="stat gris" data-filter="ingreso"><div class="n" id="stIngreso">0</div><div class="l">Ingreso / preparación</div></div>
+      <div class="stat amarillo" data-filter="campo"><div class="n" id="stCampo">0</div><div class="l">En campo / laboratorio</div></div>
+      <div class="stat naranja" data-filter="revision"><div class="n" id="stRevision">0</div><div class="l">Informe / revisión</div></div>
+      <div class="stat verde" data-filter="entregado"><div class="n" id="stEntregado">0</div><div class="l">Entregado</div></div>
+    </div>
+
+    <div class="legend">
+      <b>Etapa del servicio:</b>
+      <span class="chip"><span class="dot gris"></span> Ingreso — sin fecha de muestreo</span>
+      <span class="chip"><span class="dot amarillo"></span> En campo — muestreo hecho, falta informe</span>
+      <span class="chip"><span class="dot naranja"></span> Esperando laboratorio (derivación) o en revisión</span>
+      <span class="chip"><span class="dot verde"></span> Entregado</span>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" class="search" id="search" placeholder="Buscar empresa, presupuesto GH o tipo de medición...">
+      <div style="display:flex;gap:8px;">
+        <button class="btn" id="clearFilter">Ver todos</button>
+        <button class="btn" id="refreshBtn" title="Releer los datos desde el servidor">Actualizar</button>
+      </div>
+    </div>
+
+    <div id="lista"></div>
+  </main>
+
+  <footer>
+    <span>Fuente de datos: planilla "Seguimiento de monitoreos" + cruce en vivo con el dashboard de Calibraciones.</span>
+    <span>GH Consultora · Mediciones y Monitoreos</span>
+  </footer>
+</div>
+
+<script>
+  var CLIENT_ID = '585469655594-8aj9hjmf7d4noglr1th673dbiia8ftkv.apps.googleusercontent.com';
+  var BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyUebPTrBOXwJFRHGy6wWBPjATSVrzxdyUp8n5LRXky1MXyHVdtlZaNm7srZgSthskS/exec';
+
+  var idToken = null;
+  var SERVICIOS = [];
+  var currentFilter = 'todos';
+  var openKeys = {};
+
+  function callBackend(action, extra) {
+    var payload = Object.assign({ action: action, idToken: idToken }, extra || {});
+    return fetch(BACKEND_URL, { method: 'POST', body: JSON.stringify(payload) })
+      .then(function (r) { return r.json(); });
+  }
+
+  /* ---------- theme toggle ---------- */
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.getElementById('themeToggle').textContent = theme === 'dark' ? '☀️ Modo claro' : '🌙 Modo oscuro';
+  }
+  function initTheme() {
+    var saved = localStorage.getItem('gh-theme');
+    var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    applyTheme(theme);
+  }
+  document.getElementById('themeToggle').addEventListener('click', function () {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('gh-theme', next);
+    applyTheme(next);
+  });
+  initTheme();
+
+  window.onload = function () {
+    google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCredentialResponse });
+    google.accounts.id.renderButton(document.getElementById('gsiButton'), { theme: 'outline', size: 'large', text: 'signin_with' });
+  };
+
+  function handleCredentialResponse(response) {
+    idToken = response.credential;
+    document.getElementById('gsiButton').style.display = 'none';
+    document.getElementById('loginSpinner').style.display = 'block';
+    document.getElementById('loginError').style.display = 'none';
+
+    callBackend('getData', {}).then(function (data) {
+      document.getElementById('loginSpinner').style.display = 'none';
+      if (!data.ok) {
+        idToken = null;
+        document.getElementById('gsiButton').style.display = 'block';
+        var err = document.getElementById('loginError');
+        err.textContent = 'Esta cuenta no está autorizada para ver el dashboard. Pedile a GH Consultora que agregue tu email a la lista.';
+        err.style.display = 'block';
+        return;
+      }
+      SERVICIOS = data.servicios;
+      document.getElementById('accountEmail').textContent = data.email;
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('dashboardScreen').style.display = 'block';
+      render();
+    }).catch(function () {
+      document.getElementById('loginSpinner').style.display = 'none';
+      document.getElementById('gsiButton').style.display = 'block';
+      var err = document.getElementById('loginError');
+      err.textContent = 'No se pudo conectar con el backend. Probá de nuevo en un momento.';
+      err.style.display = 'block';
+    });
+  }
+
+  document.getElementById('signOutBtn').addEventListener('click', function () {
+    idToken = null;
+    SERVICIOS = [];
+    google.accounts.id.disableAutoSelect();
+    document.getElementById('dashboardScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('gsiButton').style.display = 'block';
+  });
+
+  document.getElementById('refreshBtn').addEventListener('click', function () {
+    callBackend('getData', {}).then(function (data) {
+      if (data.ok) { SERVICIOS = data.servicios; render(); }
+    });
+  });
+
+  /* ---------- helpers de etapa ---------- */
+
+  function etapaDe(servicio) {
+    if (!servicio.fechaMuestreo) return 'ingreso';
+    var todasConInforme = servicio.mediciones.length > 0 && servicio.mediciones.every(function (m) { return !!m.entregaInforme; });
+    if (!todasConInforme) {
+      var esperandoLab = servicio.necesitaDerivacion && servicio.mediciones.some(function (m) {
+        return (m.derivacionLab || m.presupuestoLab) && !m.entregaResultados;
+      });
+      return esperandoLab ? 'esperandoLab' : 'campo';
+    }
+    if (!servicio.fechaEntregaDigital) return 'revision';
+    return 'entregado';
+  }
+  var ETAPA_INFO = {
+    ingreso: { label: 'Ingreso / preparación', color: 'gris', bucket: 'ingreso' },
+    campo: { label: 'En campo, armando informe', color: 'amarillo', bucket: 'campo' },
+    esperandoLab: { label: 'Esperando laboratorio', color: 'naranja', bucket: 'campo' },
+    revision: { label: 'En revisión interna', color: 'naranja', bucket: 'revision' },
+    entregado: { label: 'Entregado', color: 'verde', bucket: 'entregado' }
+  };
+
+  var CALIB_LABEL = { verde: 'Equipos OK', amarillo: 'Vence pronto', naranja: 'Vence pronto', rojo: 'Equipo vencido', sin_match: 'Revisar a mano', gris: 'Sin fecha' };
+  var CALIB_COLOR = { verde: 'verde', amarillo: 'amarillo', naranja: 'naranja', rojo: 'rojo', sin_match: 'gris', gris: 'gris' };
+
+  function checklistProgreso(servicio) {
+    var c = servicio.checklist;
+    var campos = ['mantenimientoEquipo', 'ccLista', 'ingresoGestionado', 'revisionInterna', 'facturaSolicitada', 'envioFinal'];
+    var listos = campos.filter(function (k) { return c[k] === true; }).length;
+    if (c.cotizacionUrl) listos++;
+    if (c.otUrl) listos++;
+    if (c.fechaCoordinada) listos++;
+    return { listos: listos, total: campos.length + 3 };
+  }
+
+  /* ---------- render ---------- */
+
+  function render() {
+    var q = (document.getElementById('search').value || '').toLowerCase().trim();
+    var counts = { ingreso: 0, campo: 0, revision: 0, entregado: 0 };
+    var lista = document.getElementById('lista');
+    lista.innerHTML = '';
+
+    SERVICIOS.forEach(function (s) {
+      var etapaKey = etapaDe(s);
+      var etapa = ETAPA_INFO[etapaKey];
+      counts[etapa.bucket]++;
+
+      var hayTexto = q === '' || (s.empresa + ' ' + s.presupuestoGH + ' ' + s.mediciones.map(function (m) { return m.tipoMuestra; }).join(' ')).toLowerCase().indexOf(q) !== -1;
+      var showByFilter = currentFilter === 'todos' || currentFilter === etapa.bucket;
+      if (!hayTexto || !showByFilter) return;
+
+      var key = s.presupuestoGH || (s.empresa + '|' + s.fechaMuestreo);
+      var progreso = checklistProgreso(s);
+
+      var div = document.createElement('div');
+      div.className = 'servicio' + (openKeys[key] ? ' open' : '');
+
+      var head = document.createElement('div');
+      head.className = 'servicio-head';
+      head.innerHTML =
+        '<div><div class="servicio-empresa">' + s.empresa + (s.presupuestoGH ? ' <span style="color:var(--ink-soft);font-weight:600;">· Presupuesto GH ' + s.presupuestoGH + '</span>' : '') + '</div>' +
+        '<div class="servicio-meta">' + s.mediciones.length + ' medición(es): ' + s.mediciones.map(function (m) { return m.tipoMuestra || '(sin tipo)'; }).join(', ') +
+        (s.fechaMuestreo ? ' · Muestreo ' + s.fechaMuestreo : '') + '</div></div>' +
+        '<div class="servicio-right">' +
+        (s.presupuestoGH ? '<span class="progreso">Checklist ' + progreso.listos + '/' + progreso.total + '</span>' : '') +
+        '<span class="badge ' + etapa.color + '"><span class="dot ' + etapa.color + '"></span>' + etapa.label + '</span>' +
+        '<span class="chev">▶</span></div>';
+      head.addEventListener('click', function () {
+        openKeys[key] = !openKeys[key];
+        render();
+      });
+      div.appendChild(head);
+
+      var body = document.createElement('div');
+      body.className = 'servicio-body';
+      body.appendChild(buildMedicionesTable_(s));
+      body.appendChild(buildChecklist_(s, key));
+      div.appendChild(body);
+
+      lista.appendChild(div);
+    });
+
+    document.getElementById('stTodos').textContent = SERVICIOS.length;
+    document.getElementById('stIngreso').textContent = counts.ingreso;
+    document.getElementById('stCampo').textContent = counts.campo;
+    document.getElementById('stRevision').textContent = counts.revision;
+    document.getElementById('stEntregado').textContent = counts.entregado;
+    document.querySelectorAll('.stat').forEach(function (el) { el.classList.toggle('active', el.dataset.filter === currentFilter); });
+  }
+
+  function buildMedicionesTable_(s) {
+    var wrap = document.createElement('table');
+    wrap.className = 'medtable';
+    // evaluarCalibracionServicio_ en el backend recorre las mediciones en el
+    // mismo orden y empuja un item por cada una, asi que el detalle queda
+    // alineado 1:1 por indice con s.mediciones.
+    var detalle = (s.equiposCalibrados && s.equiposCalibrados.detalle) || [];
+    var rows = s.mediciones.map(function (m, i) {
+      var calib = detalle[i] || { estado: 'sin_match' };
+      return '<tr>' +
+        '<td>' + (m.tipoMuestra || '—') + (m.cantidadMuestras ? ' <span style="color:var(--ink-soft);">(' + m.cantidadMuestras + ')</span>' : '') + '</td>' +
+        '<td>' + (m.derivacionLab ? m.derivacionLab + (m.presupuestoLab ? ' · ppto ' + m.presupuestoLab : '') : 'Directa') + '</td>' +
+        '<td><span class="badge ' + CALIB_COLOR[calib.estado] + '">' + CALIB_LABEL[calib.estado] + '</span></td>' +
+        '<td>' + (m.entregaInforme ? 'Informe listo' : (m.entregaResultados ? 'Resultados OK, falta informe' : 'Pendiente')) + (m.entregaFecha ? ' · ' + m.entregaFecha : '') + '</td>' +
+        '<td>' + (m.facturaServicio.numero ? 'Nº ' + m.facturaServicio.numero : '—') + '</td>' +
+        '</tr>';
+    }).join('');
+    wrap.innerHTML =
+      '<thead><tr><th>Tipo de medición</th><th>Derivación</th><th>Equipos</th><th>Informe</th><th>Factura serv.</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>';
+    return wrap;
+  }
+
+  function buildChecklist_(s, key) {
+    var wrap = document.createElement('div');
+    if (!s.presupuestoGH) {
+      wrap.innerHTML = '<div class="sin-presupuesto">Sin Presupuesto GH asignado todavía — el checklist del proceso se habilita apenas se completa ese dato en la planilla.</div>';
+      return wrap;
+    }
+    var c = s.checklist;
+    var title = document.createElement('div');
+    title.className = 'checklist-title';
+    title.textContent = 'Checklist del proceso';
+    wrap.appendChild(title);
+
+    var grid = document.createElement('div');
+    grid.className = 'checklist';
+
+    grid.appendChild(textItem_('Cotización (link al PDF)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); }));
+    grid.appendChild(textItem_('Orden de Trabajo (link al PDF)', c.otUrl, function (v) { update_(s, 'otUrl', v); }));
+    grid.appendChild(checkItem_('Mantenimiento / insumos del equipo', c.mantenimientoEquipo, function (v) { update_(s, 'mantenimientoEquipo', v); }));
+    grid.appendChild(checkWithText_('Cadena de Custodia lista', c.ccLista, function (v) { update_(s, 'ccLista', v); }, 'Link a la CC', c.ccUrl, function (v) { update_(s, 'ccUrl', v); }));
+    grid.appendChild(dateAndTextItem_('Fecha coordinada', c.fechaCoordinada, function (v) { update_(s, 'fechaCoordinada', v); }, 'Técnico asignado', c.tecnicoAsignado, function (v) { update_(s, 'tecnicoAsignado', v); }));
+    grid.appendChild(checkItem_('Ingreso del técnico gestionado', c.ingresoGestionado, function (v) { update_(s, 'ingresoGestionado', v); }));
+    grid.appendChild(checkItem_('Revisión interna aprobada', c.revisionInterna, function (v) { update_(s, 'revisionInterna', v); }));
+    grid.appendChild(checkItem_('Factura solicitada', c.facturaSolicitada, function (v) { update_(s, 'facturaSolicitada', v); }));
+    grid.appendChild(checkItem_('Envío final (factura + informe) enviado', c.envioFinal, function (v) { update_(s, 'envioFinal', v); }));
+
+    wrap.appendChild(grid);
+    return wrap;
+
+    function update_(servicio, field, value) {
+      callBackend('updateChecklist', { presupuestoGH: servicio.presupuestoGH, empresa: servicio.empresa, field: field, value: value }).then(function (data) {
+        if (data.ok) { SERVICIOS = data.servicios; render(); }
+      });
+    }
+  }
+
+  function checkItem_(labelText, checked, onChange) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    var input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = !!checked;
+    input.addEventListener('change', function () { onChange(input.checked); });
+    var label = document.createElement('label');
+    label.textContent = labelText;
+    div.appendChild(input);
+    div.appendChild(label);
+    return div;
+  }
+
+  function textItem_(labelText, value, onChange) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.innerHTML = '<div class="field-inputs" style="flex-direction:column;gap:4px;"><label style="font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">' + labelText + '</label></div>';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'https://drive.google.com/...';
+    input.value = value || '';
+    input.addEventListener('blur', function () { if (input.value !== value) onChange(input.value); });
+    div.querySelector('.field-inputs').appendChild(input);
+    return div;
+  }
+
+  function checkWithText_(labelText, checked, onChangeCheck, textLabel, textValue, onChangeText) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+    var top = checkItem_(labelText, checked, onChangeCheck);
+    top.style.marginBottom = '4px';
+    div.appendChild(top);
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = textLabel + ' (https://drive.google.com/...)';
+    input.value = textValue || '';
+    input.style.marginLeft = '24px';
+    input.addEventListener('blur', function () { if (input.value !== textValue) onChangeText(input.value); });
+    div.appendChild(input);
+    return div;
+  }
+
+  function dateAndTextItem_(dateLabel, dateValue, onChangeDate, textLabel, textValue, onChangeText) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.innerHTML = '<div class="field-inputs" style="flex-direction:column;gap:4px;"><label style="font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">' + dateLabel + ' / ' + textLabel + '</label></div>';
+    var row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '6px';
+    var dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.value = dateValue || '';
+    dateInput.addEventListener('change', function () { onChangeDate(dateInput.value); });
+    var textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.placeholder = textLabel;
+    textInput.value = textValue || '';
+    textInput.addEventListener('blur', function () { if (textInput.value !== textValue) onChangeText(textInput.value); });
+    row.appendChild(dateInput);
+    row.appendChild(textInput);
+    div.querySelector('.field-inputs').appendChild(row);
+    return div;
+  }
+
+  document.getElementById('search').addEventListener('input', render);
+  document.getElementById('clearFilter').addEventListener('click', function () { currentFilter = 'todos'; render(); });
+  document.querySelectorAll('.stat').forEach(function (s) {
+    s.addEventListener('click', function () { currentFilter = s.dataset.filter; render(); });
+  });
+</script>
+</body>
+</html>
