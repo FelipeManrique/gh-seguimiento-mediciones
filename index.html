@@ -69,6 +69,8 @@
   .search{flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;background:var(--card);color:var(--ink);}
   .btn{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
   .btn:hover{border-color:var(--brand-dark);color:var(--brand-dark);}
+  .btn.primary{background:var(--brand-dark);border-color:var(--brand-dark);color:#fff;}
+  .btn.primary:hover{opacity:.9;color:#fff;}
 
   .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;}
   .badge.verde{background:var(--verde-bg);color:var(--verde);} .badge.amarillo{background:var(--amarillo-bg);color:var(--amarillo);}
@@ -102,6 +104,27 @@
   .check-item input[type="text"], .check-item input[type="date"]{flex:1;min-width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;background:var(--card);color:var(--ink);}
   .check-item label{flex:1;}
   .sin-presupuesto{font-size:12px;color:var(--ink-soft);font-style:italic;padding:6px 0;}
+
+  .step-paso{border-left:3px solid var(--brand-dark);padding:2px 0 2px 14px;margin-bottom:16px;}
+  .step-paso-title{font-size:12.5px;font-weight:700;margin-bottom:8px;}
+  .step-paso-nota{font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;}
+  .step-paso.step-locked{border-left-color:var(--line);}
+  .step-paso.step-locked .step-paso-title{color:var(--ink-soft);}
+  .step-paso.step-locked .checklist{opacity:.45;pointer-events:none;}
+
+  .fab-nuevo{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;margin-top:6px;border:1px dashed var(--line);border-radius:var(--radius);background:transparent;color:var(--ink-soft);font-size:13.5px;font-weight:600;cursor:pointer;}
+  .fab-nuevo:hover{border-color:var(--brand-dark);color:var(--brand-dark);}
+
+  #modalOverlay{display:none;position:fixed;inset:0;background:rgba(20,23,15,.45);align-items:center;justify-content:center;padding:20px;z-index:50;}
+  #modalCard{background:var(--card);border-radius:var(--radius);padding:24px;width:100%;max-width:420px;}
+  #modalCard h2{margin:0 0 4px;font-size:17px;}
+  #modalCard p.hint{margin:0 0 16px;font-size:12.5px;color:var(--ink-soft);}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;font-weight:700;margin-bottom:5px;}
+  .field input{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;background:var(--card);color:var(--ink);}
+  #modalActions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+  #modalStatus{font-size:12.5px;margin-top:10px;min-height:16px;}
+  #modalStatus.err{color:var(--rojo);} #modalStatus.ok{color:var(--verde);}
 
   footer{max-width:1160px;margin:0 auto;padding:6px 28px 40px;font-size:11.5px;color:var(--ink-soft);
     display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
@@ -190,12 +213,42 @@
     </div>
 
     <div id="lista"></div>
+
+    <button type="button" class="fab-nuevo" id="nuevaMedicionBtn">+ Nueva medición</button>
   </main>
 
   <footer>
     <span>Fuente de datos: planilla "Seguimiento de monitoreos" + cruce en vivo con el dashboard de Calibraciones.</span>
     <span>GH Consultora · Mediciones y Monitoreos</span>
   </footer>
+</div>
+
+<div id="modalOverlay">
+  <div id="modalCard">
+    <h2>Nueva medición</h2>
+    <p class="hint">Arranca el proceso desde cero: empresa, Presupuesto GH y (si ya la tenés) el link a la cotización. Después vas completando el resto del paso a paso.</p>
+    <div class="field">
+      <label for="nmEmpresa">Empresa</label>
+      <input type="text" id="nmEmpresa" placeholder="Bodegas Salentein S.A.">
+    </div>
+    <div class="field">
+      <label for="nmPresupuestoGH">Presupuesto GH</label>
+      <input type="text" id="nmPresupuestoGH" placeholder="431">
+    </div>
+    <div class="field">
+      <label for="nmOrdenCompra">Orden de compra (si corresponde)</label>
+      <input type="text" id="nmOrdenCompra" placeholder="59984">
+    </div>
+    <div class="field">
+      <label for="nmCotizacion">Cotización (link al PDF)</label>
+      <input type="text" id="nmCotizacion" placeholder="https://drive.google.com/...">
+    </div>
+    <div id="modalStatus"></div>
+    <div id="modalActions">
+      <button class="btn" id="cancelModalBtn">Cancelar</button>
+      <button class="btn primary" id="submitModalBtn">Crear</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -307,7 +360,8 @@
 
   function checklistProgreso(servicio) {
     var c = servicio.checklist;
-    var campos = ['mantenimientoEquipo', 'ccLista', 'ingresoGestionado', 'revisionInterna', 'facturaSolicitada', 'envioFinal'];
+    if (c.terminadoManual) return { listos: 1, total: 1 };
+    var campos = ['mantenimientoEquipo', 'ccLista', 'ingresoGestionado', 'medicionRealizada', 'revisionInterna', 'facturaSolicitada', 'envioFinal'];
     var listos = campos.filter(function (k) { return c[k] === true; }).length;
     if (c.cotizacionUrl) listos++;
     if (c.otUrl) listos++;
@@ -342,7 +396,7 @@
       head.className = 'servicio-head';
       head.innerHTML =
         '<div><div class="servicio-empresa">' + s.empresa + (s.presupuestoGH ? ' <span style="color:var(--ink-soft);font-weight:600;">· Presupuesto GH ' + s.presupuestoGH + '</span>' : '') + '</div>' +
-        '<div class="servicio-meta">' + s.mediciones.length + ' medición(es): ' + s.mediciones.map(function (m) { return m.tipoMuestra || '(sin tipo)'; }).join(', ') +
+        '<div class="servicio-meta">' + (s.mediciones.length ? (s.mediciones.length + ' medición(es): ' + s.mediciones.map(function (m) { return m.tipoMuestra || '(sin tipo)'; }).join(', ')) : 'Servicio nuevo — todavía sin mediciones registradas') +
         (s.fechaMuestreo ? ' · Muestreo ' + s.fechaMuestreo : '') + '</div></div>' +
         '<div class="servicio-right">' +
         (s.presupuestoGH ? '<span class="progreso">Checklist ' + progreso.listos + '/' + progreso.total + '</span>' : '') +
@@ -356,7 +410,7 @@
 
       var body = document.createElement('div');
       body.className = 'servicio-body';
-      body.appendChild(buildMedicionesTable_(s));
+      if (s.mediciones.length) body.appendChild(buildMedicionesTable_(s));
       body.appendChild(buildChecklist_(s, key));
       div.appendChild(body);
 
@@ -401,32 +455,106 @@
       return wrap;
     }
     var c = s.checklist;
-    var title = document.createElement('div');
-    title.className = 'checklist-title';
-    title.textContent = 'Checklist del proceso';
-    wrap.appendChild(title);
-
-    var grid = document.createElement('div');
-    grid.className = 'checklist';
-
-    grid.appendChild(textItem_('Cotización (link al PDF)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); }));
-    grid.appendChild(otItemConBoton_(s, c, update_));
-    grid.appendChild(checkItem_('Mantenimiento / insumos del equipo', c.mantenimientoEquipo, function (v) { update_(s, 'mantenimientoEquipo', v); }));
-    grid.appendChild(checkWithText_('Cadena de Custodia lista', c.ccLista, function (v) { update_(s, 'ccLista', v); }, 'Link a la CC', c.ccUrl, function (v) { update_(s, 'ccUrl', v); }));
-    grid.appendChild(dateAndTextItem_('Fecha coordinada', c.fechaCoordinada, function (v) { update_(s, 'fechaCoordinada', v); }, 'Técnico asignado', c.tecnicoAsignado, function (v) { update_(s, 'tecnicoAsignado', v); }));
-    grid.appendChild(checkItem_('Ingreso del técnico gestionado', c.ingresoGestionado, function (v) { update_(s, 'ingresoGestionado', v); }));
-    grid.appendChild(checkItem_('Revisión interna aprobada', c.revisionInterna, function (v) { update_(s, 'revisionInterna', v); }));
-    grid.appendChild(checkItem_('Factura solicitada', c.facturaSolicitada, function (v) { update_(s, 'facturaSolicitada', v); }));
-    grid.appendChild(checkItem_('Envío final (factura + informe) enviado', c.envioFinal, function (v) { update_(s, 'envioFinal', v); }));
-
-    wrap.appendChild(grid);
-    return wrap;
 
     function update_(servicio, field, value) {
       callBackend('updateChecklist', { presupuestoGH: servicio.presupuestoGH, empresa: servicio.empresa, field: field, value: value }).then(function (data) {
         if (data.ok) { SERVICIOS = data.servicios; render(); }
       });
     }
+
+    // Las mediciones que ya estaban cargadas antes de este dashboard no
+    // necesitan pasar por todo el checklist paso a paso: alcanza un check de
+    // "esto ya se hizo". El stepper detallado es para las que arrancan de cero
+    // con el boton "+".
+    if (!s.esNuevo) {
+      var topRow = document.createElement('div');
+      topRow.style.marginBottom = '10px';
+      topRow.appendChild(checkItem_(
+        c.terminadoManual ? '✓ Marcada como terminada' : 'Marcar como terminada (ya se hizo, no necesita el paso a paso)',
+        c.terminadoManual,
+        function (v) { update_(s, 'terminadoManual', v); }
+      ));
+      wrap.appendChild(topRow);
+      if (c.terminadoManual) return wrap;
+    }
+
+    var title = document.createElement('div');
+    title.className = 'checklist-title';
+    title.textContent = 'Checklist del proceso';
+    wrap.appendChild(title);
+
+    if (!s.esNuevo) {
+      // Servicio existente sin marcar terminado: se muestra el detalle plano,
+      // sin bloqueos, porque puede que ya venga con pasos hechos fuera de orden.
+      var grid = document.createElement('div');
+      grid.className = 'checklist';
+      grid.appendChild(textItem_('Cotización (link al PDF)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); }));
+      grid.appendChild(otItemConBoton_(s, c, update_));
+      grid.appendChild(checkItem_('Mantenimiento / insumos del equipo', c.mantenimientoEquipo, function (v) { update_(s, 'mantenimientoEquipo', v); }));
+      grid.appendChild(checkWithText_('Cadena de Custodia lista', c.ccLista, function (v) { update_(s, 'ccLista', v); }, 'Link a la CC', c.ccUrl, function (v) { update_(s, 'ccUrl', v); }));
+      grid.appendChild(dateAndTextItem_('Fecha coordinada', c.fechaCoordinada, function (v) { update_(s, 'fechaCoordinada', v); }, 'Técnico asignado', c.tecnicoAsignado, function (v) { update_(s, 'tecnicoAsignado', v); }));
+      grid.appendChild(checkItem_('Ingreso del técnico gestionado', c.ingresoGestionado, function (v) { update_(s, 'ingresoGestionado', v); }));
+      grid.appendChild(checkItem_('Medición realizada', c.medicionRealizada, function (v) { update_(s, 'medicionRealizada', v); }));
+      grid.appendChild(checkItem_('Revisión interna aprobada', c.revisionInterna, function (v) { update_(s, 'revisionInterna', v); }));
+      grid.appendChild(checkItem_('Factura solicitada', c.facturaSolicitada, function (v) { update_(s, 'facturaSolicitada', v); }));
+      grid.appendChild(checkItem_('Envío final (factura + informe) enviado', c.envioFinal, function (v) { update_(s, 'envioFinal', v); }));
+      wrap.appendChild(grid);
+      return wrap;
+    }
+
+    // Servicio nuevo (creado con el boton "+"): stepper con pasos que se
+    // desbloquean solo cuando el paso anterior esta cumplido.
+    wrap.appendChild(stepPaso_('1. Ingreso', true, [
+      textItem_('Cotización (link al PDF)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); })
+    ]));
+    wrap.appendChild(stepPaso_('2. Orden de Trabajo', !!c.cotizacionUrl, [
+      otItemConBoton_(s, c, update_)
+    ]));
+    var preparacionOk = !!c.otUrl;
+    wrap.appendChild(stepPaso_('3. Preparación técnica', preparacionOk, [
+      checkItem_('Mantenimiento / insumos del equipo', c.mantenimientoEquipo, function (v) { update_(s, 'mantenimientoEquipo', v); }),
+      checkWithText_('Cadena de Custodia lista', c.ccLista, function (v) { update_(s, 'ccLista', v); }, 'Link a la CC', c.ccUrl, function (v) { update_(s, 'ccUrl', v); })
+    ]));
+    var coordinacionOk = preparacionOk && c.mantenimientoEquipo && c.ccLista;
+    wrap.appendChild(stepPaso_('4. Coordinación', coordinacionOk, [
+      dateAndTextItem_('Fecha coordinada', c.fechaCoordinada, function (v) { update_(s, 'fechaCoordinada', v); }, 'Técnico asignado', c.tecnicoAsignado, function (v) { update_(s, 'tecnicoAsignado', v); }),
+      checkItem_('Ingreso del técnico gestionado', c.ingresoGestionado, function (v) { update_(s, 'ingresoGestionado', v); })
+    ]));
+    var ejecucionOk = coordinacionOk && c.ingresoGestionado;
+    wrap.appendChild(stepPaso_('5. Ejecución', ejecucionOk, [
+      checkItem_('Medición realizada', c.medicionRealizada, function (v) { update_(s, 'medicionRealizada', v); })
+    ]));
+    var revisionOk = ejecucionOk && c.medicionRealizada;
+    wrap.appendChild(stepPaso_('6. Revisión', revisionOk, [
+      checkItem_('Revisión interna aprobada', c.revisionInterna, function (v) { update_(s, 'revisionInterna', v); })
+    ]));
+    var facturaOk = revisionOk && c.revisionInterna;
+    wrap.appendChild(stepPaso_('7. Facturación y cierre', facturaOk, [
+      checkItem_('Factura solicitada', c.facturaSolicitada, function (v) { update_(s, 'facturaSolicitada', v); }),
+      checkItem_('Envío final (factura + informe) enviado', c.envioFinal, function (v) { update_(s, 'envioFinal', v); })
+    ]));
+
+    return wrap;
+  }
+
+  function stepPaso_(titulo, desbloqueado, items) {
+    var box = document.createElement('div');
+    box.className = 'step-paso' + (desbloqueado ? '' : ' step-locked');
+    var h = document.createElement('div');
+    h.className = 'step-paso-title';
+    h.textContent = titulo + (desbloqueado ? '' : ' 🔒');
+    box.appendChild(h);
+    if (!desbloqueado) {
+      var nota = document.createElement('div');
+      nota.className = 'step-paso-nota';
+      nota.textContent = 'Se habilita al completar el paso anterior.';
+      box.appendChild(nota);
+    }
+    var grid = document.createElement('div');
+    grid.className = 'checklist';
+    items.forEach(function (it) { grid.appendChild(it); });
+    box.appendChild(grid);
+    return box;
   }
 
   function otItemConBoton_(s, c, update_) {
@@ -557,6 +685,50 @@
   document.getElementById('clearFilter').addEventListener('click', function () { currentFilter = 'todos'; render(); });
   document.querySelectorAll('.stat').forEach(function (s) {
     s.addEventListener('click', function () { currentFilter = s.dataset.filter; render(); });
+  });
+
+  /* ---------- modal "Nueva medición" ---------- */
+  document.getElementById('nuevaMedicionBtn').addEventListener('click', function () {
+    ['nmEmpresa', 'nmPresupuestoGH', 'nmOrdenCompra', 'nmCotizacion'].forEach(function (id) { document.getElementById(id).value = ''; });
+    document.getElementById('modalStatus').textContent = '';
+    document.getElementById('modalStatus').className = '';
+    document.getElementById('modalOverlay').style.display = 'flex';
+  });
+  document.getElementById('cancelModalBtn').addEventListener('click', function () {
+    document.getElementById('modalOverlay').style.display = 'none';
+  });
+  document.getElementById('submitModalBtn').addEventListener('click', function () {
+    var empresa = document.getElementById('nmEmpresa').value.trim();
+    var presupuestoGH = document.getElementById('nmPresupuestoGH').value.trim();
+    var ordenCompra = document.getElementById('nmOrdenCompra').value.trim();
+    var cotizacionUrl = document.getElementById('nmCotizacion').value.trim();
+    var status = document.getElementById('modalStatus');
+
+    if (!empresa || !presupuestoGH) {
+      status.textContent = 'Completá al menos la empresa y el Presupuesto GH.';
+      status.className = 'err';
+      return;
+    }
+    status.textContent = 'Creando...';
+    status.className = '';
+    document.getElementById('submitModalBtn').disabled = true;
+
+    callBackend('crearServicio', { empresa: empresa, presupuestoGH: presupuestoGH, ordenCompra: ordenCompra, cotizacionUrl: cotizacionUrl }).then(function (data) {
+      document.getElementById('submitModalBtn').disabled = false;
+      if (!data.ok) {
+        status.textContent = 'Error: ' + (data.error || 'desconocido');
+        status.className = 'err';
+        return;
+      }
+      SERVICIOS = data.servicios;
+      openKeys[presupuestoGH] = true;
+      document.getElementById('modalOverlay').style.display = 'none';
+      render();
+    }).catch(function () {
+      document.getElementById('submitModalBtn').disabled = false;
+      status.textContent = 'No se pudo conectar con el backend.';
+      status.className = 'err';
+    });
   });
 </script>
 </body>
