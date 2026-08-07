@@ -228,8 +228,9 @@
     <h2>Nueva medición</h2>
     <p class="hint">Adjuntá el PDF de la cotización ya aceptada por el cliente. El sistema saca solo la empresa, el Presupuesto GH y las mediciones, y las carga en la planilla y en este dashboard.</p>
     <div class="field">
-      <label for="nmArchivo">Cotización (PDF)</label>
-      <input type="file" id="nmArchivo" accept="application/pdf">
+      <label for="nmArchivo">Cotización (PDF o Word)</label>
+      <input type="file" id="nmArchivo" accept="application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+      <p class="hint" style="margin:6px 0 0;">Si existe la versión Word (antes de exportarla a PDF), esa da un resultado más prolijo.</p>
     </div>
     <div id="modalStatus"></div>
     <div id="modalActions">
@@ -374,7 +375,7 @@
       var showByFilter = currentFilter === 'todos' || currentFilter === etapa.bucket;
       if (!hayTexto || !showByFilter) return;
 
-      var key = s.presupuestoGH || (s.empresa + '|' + s.fechaMuestreo);
+      var key = s.presupuestoGH || s.claveServicio || (s.empresa + '|' + s.fechaMuestreo);
       var progreso = checklistProgreso(s);
 
       var div = document.createElement('div');
@@ -391,7 +392,7 @@
         '<span class="badge ' + etapa.color + '"><span class="dot ' + etapa.color + '"></span>' + etapa.label + '</span>' +
         '<span class="chev">▶</span></div>';
 
-      if (!s.esNuevo && s.presupuestoGH) {
+      if (!s.esNuevo) {
         var terminadoBtn = document.createElement('button');
         terminadoBtn.type = 'button';
         terminadoBtn.className = 'btn' + (s.checklist.terminadoManual ? ' primary' : '');
@@ -401,7 +402,7 @@
         terminadoBtn.title = 'Esta medición ya estaba cargada antes del dashboard: marcala como terminada si ya se hizo por completo.';
         terminadoBtn.addEventListener('click', function (ev) {
           ev.stopPropagation();
-          callBackend('updateChecklist', { presupuestoGH: s.presupuestoGH, empresa: s.empresa, field: 'terminadoManual', value: !s.checklist.terminadoManual }).then(function (data) {
+          callBackend('updateChecklist', { presupuestoGH: key, empresa: s.empresa, field: 'terminadoManual', value: !s.checklist.terminadoManual }).then(function (data) {
             if (data.ok) { SERVICIOS = data.servicios; render(); }
           });
         });
@@ -456,14 +457,17 @@
 
   function buildChecklist_(s, key) {
     var wrap = document.createElement('div');
-    if (!s.presupuestoGH) {
+    if (s.esNuevo && !s.presupuestoGH) {
       wrap.innerHTML = '<div class="sin-presupuesto">Sin Presupuesto GH asignado todavía — el checklist del proceso se habilita apenas se completa ese dato en la planilla.</div>';
       return wrap;
     }
     var c = s.checklist;
 
+    // "key" es el Presupuesto GH cuando existe, o una clave alternativa
+    // estable (empresa+OC+fecha) para las mediciones viejas que todavia no
+    // tienen uno asignado en la planilla — así igual pueden llevar checklist.
     function update_(servicio, field, value) {
-      callBackend('updateChecklist', { presupuestoGH: servicio.presupuestoGH, empresa: servicio.empresa, field: field, value: value }).then(function (data) {
+      callBackend('updateChecklist', { presupuestoGH: key, empresa: servicio.empresa, field: field, value: value }).then(function (data) {
         if (data.ok) { SERVICIOS = data.servicios; render(); }
       });
     }
@@ -686,9 +690,14 @@
     s.addEventListener('click', function () { currentFilter = s.dataset.filter; render(); });
   });
 
+  var MIME_COTIZACION_PERMITIDOS = [
+    'application/pdf', 'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ];
   var ERROR_CARGA_COTIZACION = {
-    falta_el_archivo: 'Elegí el PDF de la cotización.',
-    no_se_pudieron_extraer_los_datos_clave: 'No se pudo identificar la empresa o el número de Presupuesto GH en ese PDF. Revisá que la cotización tenga los campos "Referencia" y "EMPRESA" como en el formato habitual.'
+    falta_el_archivo: 'Elegí el PDF o Word de la cotización.',
+    formato_no_soportado: 'Ese formato no se puede leer. Subí un PDF o un Word (.doc/.docx).',
+    no_se_pudieron_extraer_los_datos_clave: 'No se pudo identificar la empresa o el número de Presupuesto GH en ese archivo. Revisá que la cotización tenga los campos "Referencia" y "EMPRESA" como en el formato habitual.'
   };
 
   /* ---------- modal "Nueva medición" ---------- */
@@ -706,12 +715,12 @@
     var status = document.getElementById('modalStatus');
 
     if (!file) {
-      status.textContent = 'Elegí el PDF de la cotización.';
+      status.textContent = 'Elegí el PDF o Word de la cotización.';
       status.className = 'err';
       return;
     }
-    if (file.type !== 'application/pdf') {
-      status.textContent = 'El archivo tiene que ser un PDF.';
+    if (MIME_COTIZACION_PERMITIDOS.indexOf(file.type) === -1) {
+      status.textContent = 'El archivo tiene que ser un PDF o un Word (.doc/.docx).';
       status.className = 'err';
       return;
     }
@@ -723,7 +732,7 @@
     var reader = new FileReader();
     reader.onload = function () {
       var base64 = reader.result.split(',')[1];
-      callBackend('cargarCotizacion', { filename: file.name, fileBase64: base64 }).then(function (data) {
+      callBackend('cargarCotizacion', { filename: file.name, contentMimeType: file.type, fileBase64: base64 }).then(function (data) {
         document.getElementById('submitModalBtn').disabled = false;
         if (!data.ok) {
           status.textContent = ERROR_CARGA_COTIZACION[data.error] || ('Error: ' + (data.error || 'desconocido'));
