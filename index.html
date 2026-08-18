@@ -262,10 +262,35 @@
   var currentFilter = 'todos';
   var openKeys = {};
 
+  // El backend tarda varios segundos (relee la planilla y cruza calibraciones).
+  // Sin un indicador parecia que el dashboard no hacia nada y se terminaba
+  // clickeando de nuevo, asi que toda llamada muestra que hay algo en curso.
+  var enVuelo = 0;
+  var TEXTO_TRABAJANDO = 'Trabajando… (puede tardar unos segundos)';
+
+  function refrescarIndicador() {
+    var caja = document.getElementById('avisoGlobal');
+    if (!caja) return;
+    if (enVuelo > 0) {
+      if (caja.style.display === 'none' || caja.textContent === TEXTO_TRABAJANDO) {
+        caja.textContent = TEXTO_TRABAJANDO;
+        caja.style.display = 'block';
+        caja.style.borderColor = 'var(--line)';
+        caja.style.color = 'var(--ink-soft)';
+      }
+    } else if (caja.textContent === TEXTO_TRABAJANDO) {
+      caja.style.display = 'none';
+    }
+  }
+
   function callBackend(action, extra) {
+    enVuelo++;
+    refrescarIndicador();
     var payload = Object.assign({ action: action, idToken: idToken }, extra || {});
+    var listo = function () { enVuelo = Math.max(0, enVuelo - 1); refrescarIndicador(); };
     return fetch(BACKEND_URL, { method: 'POST', body: JSON.stringify(payload) })
-      .then(function (r) { return r.json(); });
+      .then(function (r) { return r.json(); })
+      .then(function (d) { listo(); return d; }, function (e) { listo(); throw e; });
   }
 
   /* ---------- theme toggle ---------- */
