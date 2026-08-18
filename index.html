@@ -103,6 +103,7 @@
   .check-item .field-inputs{display:flex;gap:6px;flex:1;flex-wrap:wrap;}
   .check-item input[type="text"], .check-item input[type="date"]{flex:1;min-width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;background:var(--card);color:var(--ink);}
   .check-item label{flex:1;}
+  .check-item select{width:100%;max-width:340px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;background:var(--card);color:var(--ink);}
   .sin-presupuesto{font-size:12px;color:var(--ink-soft);font-style:italic;padding:6px 0;}
 
   .step-paso{border-left:3px solid var(--brand-dark);padding:2px 0 2px 14px;margin-bottom:16px;}
@@ -245,6 +246,18 @@
 
   var idToken = null;
   var SERVICIOS = [];
+  // Los tipos de CC salen de la carpeta real en Drive, asi que si agregan o
+  // renombran alguno el desplegable se actualiza sin tocar este archivo.
+  var TEMPLATES_CC = [];
+
+  function cargarTemplatesCC() {
+    callBackend('listarTemplatesCC', {}).then(function (data) {
+      if (data && data.ok && data.templates) {
+        TEMPLATES_CC = data.templates;
+        render();
+      }
+    }).catch(function () { /* sin lista, el desplegable queda vacio */ });
+  }
   var currentFilter = 'todos';
   var openKeys = {};
 
@@ -297,6 +310,7 @@
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('dashboardScreen').style.display = 'block';
       render();
+      cargarTemplatesCC();
     }).catch(function () {
       document.getElementById('loginSpinner').style.display = 'none';
       document.getElementById('gsiButton').style.display = 'block';
@@ -497,7 +511,7 @@
       grid.appendChild(textItem_('Cotización (link al PDF)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); }));
       grid.appendChild(otItemConBoton_(s, c, update_));
       grid.appendChild(checkItem_('Mantenimiento / insumos del equipo', c.mantenimientoEquipo, function (v) { update_(s, 'mantenimientoEquipo', v); }));
-      grid.appendChild(checkWithText_('Cadena de Custodia lista', c.ccLista, function (v) { update_(s, 'ccLista', v); }, 'Link a la CC', c.ccUrl, function (v) { update_(s, 'ccUrl', v); }));
+      grid.appendChild(ccItemConBotones_(s, c, update_));
       grid.appendChild(dateAndTextItem_('Fecha coordinada', c.fechaCoordinada, function (v) { update_(s, 'fechaCoordinada', v); }, 'Técnico asignado', c.tecnicoAsignado, function (v) { update_(s, 'tecnicoAsignado', v); }));
       grid.appendChild(checkItem_('Ingreso del técnico gestionado', c.ingresoGestionado, function (v) { update_(s, 'ingresoGestionado', v); }));
       grid.appendChild(checkItem_('Medición realizada', c.medicionRealizada, function (v) { update_(s, 'medicionRealizada', v); }));
@@ -519,7 +533,7 @@
     var preparacionOk = !!c.otUrl;
     wrap.appendChild(stepPaso_('3. Preparación técnica', preparacionOk, [
       checkItem_('Mantenimiento / insumos del equipo', c.mantenimientoEquipo, function (v) { update_(s, 'mantenimientoEquipo', v); }),
-      checkWithText_('Cadena de Custodia lista', c.ccLista, function (v) { update_(s, 'ccLista', v); }, 'Link a la CC', c.ccUrl, function (v) { update_(s, 'ccUrl', v); })
+      ccItemConBotones_(s, c, update_)
     ]));
     var coordinacionOk = preparacionOk && c.mantenimientoEquipo && c.ccLista;
     wrap.appendChild(stepPaso_('4. Coordinación', coordinacionOk, [
@@ -645,6 +659,140 @@
     input.value = value || '';
     input.addEventListener('blur', function () { if (input.value !== value) onChange(input.value); });
     div.querySelector('.field-inputs').appendChild(input);
+    return div;
+  }
+
+  // Paso de Cadena de Custodia: ademas del check y el link, permite generarla.
+  // "Estandar" la arma desde el template elegido y le completa los datos de la
+  // empresa; "personalizada" sube el Excel armado a mano y le completa el mismo
+  // rotulo. En los dos casos queda en 1. INFORMES / {empresa} / Mediciones {fecha} / {tipo}.
+  function ccItemConBotones_(s, c, update_) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+
+    var top = checkItem_('Cadena de Custodia lista', c.ccLista, function (v) { update_(s, 'ccLista', v); });
+    top.style.marginBottom = '4px';
+    div.appendChild(top);
+
+    var link = document.createElement('input');
+    link.type = 'text';
+    link.placeholder = 'Link a la CC (https://drive.google.com/...)';
+    link.value = c.ccUrl || '';
+    link.style.marginLeft = '24px';
+    link.addEventListener('blur', function () { if (link.value !== c.ccUrl) update_(s, 'ccUrl', link.value); });
+    div.appendChild(link);
+
+    var caja = document.createElement('div');
+    caja.style.marginLeft = '24px';
+    caja.style.marginTop = '8px';
+
+    var sel = document.createElement('select');
+    var vacia = document.createElement('option');
+    vacia.value = '';
+    vacia.textContent = TEMPLATES_CC.length ? 'Elegí el tipo de cadena de custodia…' : 'Cargando tipos…';
+    sel.appendChild(vacia);
+    TEMPLATES_CC.forEach(function (t) {
+      var o = document.createElement('option');
+      o.value = t.nombre;
+      o.textContent = t.nombre;
+      sel.appendChild(o);
+    });
+
+    var estado = document.createElement('div');
+    estado.style.fontSize = '11.5px';
+    estado.style.marginTop = '4px';
+    function fallo_(msg) { estado.style.color = 'var(--rojo)'; estado.textContent = msg; }
+    function aviso_(msg) { estado.style.color = 'var(--ink-soft)'; estado.textContent = msg; }
+
+    function datosBase_() {
+      return {
+        presupuestoGH: s.presupuestoGH,
+        empresa: s.empresa,
+        ordenCompra: s.ordenCompra,
+        template: sel.value,
+        cotizacionUrl: c.cotizacionUrl,
+        fechaCoordinada: c.fechaCoordinada,
+        fechaMuestreo: s.fechaMuestreo,
+        fechaRecepcion: s.fechaRecepcionGH
+      };
+    }
+
+    function resolver_(data, btn) {
+      btn.disabled = false;
+      if (!data.ok) {
+        if (data.error === 'varias_carpetas_posibles') {
+          fallo_('Hay varias carpetas posibles para esta empresa (' +
+            (data.candidatas || []).join(' / ') + '). No creo ninguna para no duplicar.');
+        } else {
+          fallo_('Error: ' + (data.error || 'desconocido'));
+        }
+        return;
+      }
+      SERVICIOS = data.servicios;
+      render();
+    }
+
+    var btnStd = document.createElement('button');
+    btnStd.type = 'button';
+    btnStd.className = 'btn primary';
+    btnStd.textContent = 'Generar CC estándar';
+    btnStd.addEventListener('click', function () {
+      if (!sel.value) { fallo_('Elegí primero el tipo de cadena de custodia.'); return; }
+      btnStd.disabled = true;
+      aviso_('Generando...');
+      callBackend('generarCC', datosBase_())
+        .then(function (d) { resolver_(d, btnStd); })
+        .catch(function () { btnStd.disabled = false; fallo_('No se pudo conectar con el backend.'); });
+    });
+
+    var archivo = document.createElement('input');
+    archivo.type = 'file';
+    archivo.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    archivo.style.display = 'none';
+
+    var btnPers = document.createElement('button');
+    btnPers.type = 'button';
+    btnPers.className = 'btn';
+    btnPers.textContent = 'Subir CC personalizada (Excel)';
+    btnPers.title = 'Subí el Excel que armaste a mano: se guarda en la carpeta correcta y le completo el rótulo';
+    btnPers.addEventListener('click', function () {
+      if (!sel.value) { fallo_('Elegí el tipo, así la CC va a la carpeta correcta.'); return; }
+      archivo.click();
+    });
+
+    archivo.addEventListener('change', function () {
+      var f = archivo.files[0];
+      if (!f) return;
+      btnPers.disabled = true;
+      aviso_('Subiendo ' + f.name + '...');
+      var reader = new FileReader();
+      reader.onload = function () {
+        var payload = datosBase_();
+        payload.filename = f.name;
+        payload.contentMimeType = f.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        payload.fileBase64 = reader.result.split(',')[1];
+        callBackend('subirCCPersonalizada', payload)
+          .then(function (d) { resolver_(d, btnPers); })
+          .catch(function () { btnPers.disabled = false; fallo_('No se pudo conectar con el backend.'); });
+      };
+      reader.onerror = function () { btnPers.disabled = false; fallo_('No se pudo leer el archivo.'); };
+      reader.readAsDataURL(f);
+    });
+
+    var fila = document.createElement('div');
+    fila.style.display = 'flex';
+    fila.style.gap = '6px';
+    fila.style.flexWrap = 'wrap';
+    fila.style.marginTop = '6px';
+    fila.appendChild(btnStd);
+    fila.appendChild(btnPers);
+
+    caja.appendChild(sel);
+    caja.appendChild(fila);
+    caja.appendChild(archivo);
+    caja.appendChild(estado);
+    div.appendChild(caja);
     return div;
   }
 
