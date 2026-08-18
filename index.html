@@ -426,6 +426,40 @@
         head.querySelector('.servicio-right').insertBefore(terminadoBtn, head.querySelector('.badge'));
       }
 
+      // Eliminar la medicion entera, para cuando se cargo mal. Borra sus filas
+      // de la planilla y su fila de checklist; los archivos que ya se hayan
+      // generado en Drive quedan (se revisan a mano).
+      var borrarBtn = document.createElement('button');
+      borrarBtn.type = 'button';
+      borrarBtn.className = 'btn';
+      borrarBtn.style.fontSize = '11.5px';
+      borrarBtn.style.padding = '5px 9px';
+      borrarBtn.textContent = '🗑';
+      borrarBtn.title = 'Eliminar esta medición (se borra de la planilla y del checklist)';
+      borrarBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var detalle = s.empresa + (s.presupuestoGH ? ' — presupuesto ' + s.presupuestoGH : '') +
+          (s.mediciones.length ? '\n' + s.mediciones.length + ' medición(es) en la planilla' : '');
+        if (!confirm('¿Eliminar esta medición?\n\n' + detalle +
+          '\n\nSe borra de la planilla y del checklist. Los archivos ya generados en Drive no se tocan.')) return;
+        borrarBtn.disabled = true;
+        callBackend('eliminarServicio', {
+          claveServicio: s.claveServicio || '',
+          presupuestoGH: key,
+          empresa: s.empresa
+        }).then(function (data) {
+          borrarBtn.disabled = false;
+          if (!data.ok) { alert('No se pudo eliminar: ' + (data.error || 'error desconocido')); return; }
+          delete openKeys[key];
+          SERVICIOS = data.servicios;
+          render();
+        }).catch(function () {
+          borrarBtn.disabled = false;
+          alert('No se pudo conectar con el backend.');
+        });
+      });
+      head.querySelector('.servicio-right').insertBefore(borrarBtn, head.querySelector('.badge'));
+
       head.addEventListener('click', function () {
         openKeys[key] = !openKeys[key];
         render();
