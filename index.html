@@ -213,7 +213,8 @@
       </div>
     </div>
 
-    <div id="lista"></div>
+    <div id="avisoGlobal" style="display:none;border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;background:var(--card);"></div>
+      <div id="lista"></div>
 
     <button type="button" class="fab-nuevo" id="nuevaMedicionBtn">+ Nueva medición</button>
   </main>
@@ -329,9 +330,42 @@
     document.getElementById('gsiButton').style.display = 'block';
   });
 
+  // Aviso visible arriba de la lista. Antes los errores se descartaban en
+  // silencio y parecia que el dashboard "no hacia nada".
+  function avisar(mensaje, tipo) {
+    var caja = document.getElementById('avisoGlobal');
+    if (!mensaje) { caja.style.display = 'none'; return; }
+    caja.textContent = mensaje;
+    caja.style.display = 'block';
+    caja.style.borderColor = tipo === 'error' ? 'var(--rojo)' : 'var(--line)';
+    caja.style.color = tipo === 'error' ? 'var(--rojo)' : 'var(--ink-soft)';
+  }
+
+  // Devuelve true si la respuesta esta ok; si no, deja el motivo a la vista.
+  // La sesion de Google vence sola al rato, y ese es el caso mas comun.
+  function respuestaOk(data, contexto) {
+    if (data && data.ok) { avisar(''); return true; }
+    var motivo = (data && data.error) || 'error desconocido';
+    if (motivo === 'auth_failed') {
+      avisar('Se venció la sesión. Cerrá sesión y volvé a entrar para seguir trabajando.', 'error');
+    } else {
+      avisar((contexto ? contexto + ': ' : '') + motivo, 'error');
+    }
+    return false;
+  }
+
   document.getElementById('refreshBtn').addEventListener('click', function () {
+    var btn = this;
+    btn.disabled = true;
+    avisar('Actualizando...');
     callBackend('getData', {}).then(function (data) {
-      if (data.ok) { SERVICIOS = data.servicios; render(); }
+      btn.disabled = false;
+      if (!respuestaOk(data, 'No se pudo actualizar')) return;
+      SERVICIOS = data.servicios;
+      render();
+    }).catch(function () {
+      btn.disabled = false;
+      avisar('No se pudo conectar con el backend.', 'error');
     });
   });
 
@@ -449,7 +483,7 @@
           empresa: s.empresa
         }).then(function (data) {
           borrarBtn.disabled = false;
-          if (!data.ok) { alert('No se pudo eliminar: ' + (data.error || 'error desconocido')); return; }
+          if (!respuestaOk(data, 'No se pudo eliminar')) return;
           delete openKeys[key];
           SERVICIOS = data.servicios;
           render();
