@@ -782,16 +782,42 @@
     var caja = document.createElement('div');
     caja.style.cssText = 'padding-top:8px;border-top:1px solid var(--line);';
 
+    // Por defecto solo las CC que corresponden a los tipos de medicion de esta
+    // campaña; el link de abajo despliega los 16 por si hace falta otra.
+    var sugeridas = s.ccSugeridas || [];
+    var verTodas = !sugeridas.length;
+
     var sel = document.createElement('select');
-    var vacia = document.createElement('option');
-    vacia.value = '';
-    vacia.textContent = TEMPLATES_CC.length ? 'Elegí el tipo de cadena de custodia…' : 'Cargando tipos…';
-    sel.appendChild(vacia);
-    TEMPLATES_CC.forEach(function (t) {
-      var o = document.createElement('option');
-      o.value = t.nombre;
-      o.textContent = t.nombre;
-      sel.appendChild(o);
+    function poblarSelect_() {
+      sel.innerHTML = '';
+      var vacia = document.createElement('option');
+      vacia.value = '';
+      vacia.textContent = TEMPLATES_CC.length ? 'Elegí el tipo de cadena de custodia…' : 'Cargando tipos…';
+      sel.appendChild(vacia);
+      TEMPLATES_CC
+        .filter(function (t) { return verTodas || sugeridas.indexOf(t.nombre) !== -1; })
+        .forEach(function (t) {
+          var o = document.createElement('option');
+          o.value = t.nombre;
+          o.textContent = t.nombre;
+          sel.appendChild(o);
+        });
+    }
+    poblarSelect_();
+
+    var alternar = document.createElement('button');
+    alternar.type = 'button';
+    alternar.style.cssText = 'border:none;background:none;color:var(--ink-soft);text-decoration:underline;cursor:pointer;font-size:11.5px;padding:2px 0;';
+    function textoAlternar_() {
+      alternar.textContent = verTodas
+        ? (sugeridas.length ? 'Ver solo las de esta campaña (' + sugeridas.length + ')' : '')
+        : 'Ver los 16 tipos';
+    }
+    textoAlternar_();
+    alternar.addEventListener('click', function () {
+      verTodas = !verTodas;
+      poblarSelect_();
+      textoAlternar_();
     });
 
     var estado = document.createElement('div');
@@ -880,6 +906,7 @@
     fila.appendChild(btnPers);
 
     caja.appendChild(sel);
+    if (sugeridas.length) caja.appendChild(alternar);
     caja.appendChild(fila);
     caja.appendChild(archivo);
     caja.appendChild(estado);
