@@ -250,6 +250,9 @@
   // Los tipos de CC salen de la carpeta real en Drive, asi que si agregan o
   // renombran alguno el desplegable se actualiza sin tocar este archivo.
   var TEMPLATES_CC = [];
+  // Equipo (nombre + mail) que llega del backend: alimenta el desplegable de
+  // tecnicos y el aviso por mail.
+  var EQUIPO = [];
 
   function cargarTemplatesCC() {
     callBackend('listarTemplatesCC', {}).then(function (data) {
@@ -332,6 +335,7 @@
         return;
       }
       SERVICIOS = data.servicios;
+      if (data.equipo) EQUIPO = data.equipo;
       document.getElementById('accountEmail').textContent = data.email;
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('dashboardScreen').style.display = 'block';
@@ -387,6 +391,7 @@
       btn.disabled = false;
       if (!respuestaOk(data, 'No se pudo actualizar')) return;
       SERVICIOS = data.servicios;
+      if (data.equipo) EQUIPO = data.equipo;
       render();
     }).catch(function () {
       btn.disabled = false;
@@ -596,58 +601,326 @@
     title.textContent = 'Checklist del proceso';
     wrap.appendChild(title);
 
-    if (!s.esNuevo) {
-      // Servicio existente sin marcar terminado: se muestra el detalle plano,
-      // sin bloqueos, porque puede que ya venga con pasos hechos fuera de orden.
-      var grid = document.createElement('div');
-      grid.className = 'checklist';
-      grid.appendChild(textItem_('Cotización (link al PDF)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); }));
-      grid.appendChild(otItemConBoton_(s, c, update_));
-      grid.appendChild(checkItem_('Mantenimiento / insumos del equipo', c.mantenimientoEquipo, function (v) { update_(s, 'mantenimientoEquipo', v); }));
-      grid.appendChild(ccItemConBotones_(s, c, update_));
-      grid.appendChild(dateAndTextItem_('Fecha coordinada', c.fechaCoordinada, function (v) { update_(s, 'fechaCoordinada', v); }, 'Técnico asignado', c.tecnicoAsignado, function (v) { update_(s, 'tecnicoAsignado', v); }));
-      grid.appendChild(checkItem_('Ingreso del técnico gestionado', c.ingresoGestionado, function (v) { update_(s, 'ingresoGestionado', v); }));
-      grid.appendChild(checkItem_('Medición realizada', c.medicionRealizada, function (v) { update_(s, 'medicionRealizada', v); }));
-      grid.appendChild(checkItem_('Revisión interna aprobada', c.revisionInterna, function (v) { update_(s, 'revisionInterna', v); }));
-      grid.appendChild(checkItem_('Factura solicitada', c.facturaSolicitada, function (v) { update_(s, 'facturaSolicitada', v); }));
-      grid.appendChild(checkItem_('Envío final (factura + informe) enviado', c.envioFinal, function (v) { update_(s, 'envioFinal', v); }));
-      wrap.appendChild(grid);
-      return wrap;
-    }
+    // El paso a paso con bloqueos aplica a toda medicion en curso. Antes solo
+    // salia para servicios sin filas en la planilla, y como la carga de
+    // cotizacion si escribe filas, en la practica no se veia nunca.
+    var carpetas = parseCarpetas(c.carpetasMedicion);
+    var ccLlenas = parseCCs(c.ccCompletadas);
+    var archIngreso = parseCCs(c.archivosIngreso);
+    var tipos = (s.mediciones || []).map(function (m) { return m.tipoMuestra; })
+      .filter(function (t) { return !!t; });
 
-    // Servicio nuevo (creado con el boton "+"): stepper con pasos que se
-    // desbloquean solo cuando el paso anterior esta cumplido.
     wrap.appendChild(stepPaso_('1. Ingreso', true, [
       textItem_('Cotización (link al PDF)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); })
     ]));
+
     wrap.appendChild(stepPaso_('2. Orden de Trabajo', !!c.cotizacionUrl, [
       otItemConBoton_(s, c, update_)
     ]));
-    var preparacionOk = !!c.otUrl;
-    wrap.appendChild(stepPaso_('3. Preparación técnica', preparacionOk, [
+
+    var ccOk = !!c.otUrl;
+    wrap.appendChild(stepPaso_('3. Cadena de Custodia', ccOk, [
       checkItem_('Mantenimiento / insumos del equipo', c.mantenimientoEquipo, function (v) { update_(s, 'mantenimientoEquipo', v); }),
       ccItemConBotones_(s, c, update_)
     ]));
-    var coordinacionOk = preparacionOk && c.mantenimientoEquipo && c.ccLista;
-    wrap.appendChild(stepPaso_('4. Coordinación', coordinacionOk, [
-      dateAndTextItem_('Fecha coordinada', c.fechaCoordinada, function (v) { update_(s, 'fechaCoordinada', v); }, 'Técnico asignado', c.tecnicoAsignado, function (v) { update_(s, 'tecnicoAsignado', v); }),
-      checkItem_('Ingreso del técnico gestionado', c.ingresoGestionado, function (v) { update_(s, 'ingresoGestionado', v); })
+
+    // 4. Tecnicos: recien despues del tilde de CC impresas
+    var tecnicosOk = ccOk && c.ccLista;
+    wrap.appendChild(stepPaso_('4. Técnico asignado', tecnicosOk, [
+      tecnicosItem_(s, c, update_)
     ]));
-    var ejecucionOk = coordinacionOk && c.ingresoGestionado;
-    wrap.appendChild(stepPaso_('5. Ejecución', ejecucionOk, [
-      checkItem_('Medición realizada', c.medicionRealizada, function (v) { update_(s, 'medicionRealizada', v); })
+
+    // 5. Ingreso: el check se habilita solo si hay PDFs subidos
+    var ingresoOk = tecnicosOk && !!(c.tecnicoAsignado || '').trim();
+    wrap.appendChild(stepPaso_('5. Gestión de ingreso', ingresoOk, [
+      subirArchivosItem_(s, c, 'ingreso', 'Documentación de ingreso (PDF)',
+        'Seguros, altas, formularios de la empresa…', '.pdf,application/pdf', archIngreso),
+      checkItemCondicionado_('Ingreso del técnico gestionado', c.ingresoGestionado,
+        function (v) { update_(s, 'ingresoGestionado', v); },
+        archIngreso.length > 0, 'Subí al menos un archivo de ingreso para poder marcarlo.')
     ]));
+
+    // 6. Fecha coordinada: recien despues del check de ingreso
+    var fechaOk = ingresoOk && c.ingresoGestionado;
+    wrap.appendChild(stepPaso_('6. Fecha coordinada', fechaOk, [
+      fechaCoordinadaItem_(s, c, update_)
+    ]));
+
+    // 7. Ejecucion: la medicion se marca realizada solo con las CC llenas subidas
+    var ejecucionOk = fechaOk && !!c.fechaCoordinada;
+    wrap.appendChild(stepPaso_('7. Ejecución', ejecucionOk, [
+      carpetasFotosItem_(carpetas),
+      subirArchivosItem_(s, c, 'ccCompletadas', 'Cadenas de custodia completadas',
+        'La CC llena, escaneada o fotografiada', '.pdf,image/*', ccLlenas, tipos),
+      subirArchivosItem_(s, c, 'informeCrudo', 'Informe crudo del equipo (opcional)',
+        'Lo que largan algunos equipos al terminar el monitoreo', '', parseCCs(c.informeCrudo)),
+      checkItemCondicionado_('Medición realizada', c.medicionRealizada,
+        function (v) { update_(s, 'medicionRealizada', v); },
+        ccLlenas.length > 0, 'Subí la/s cadena/s de custodia completadas para poder marcarlo.')
+    ]));
+
     var revisionOk = ejecucionOk && c.medicionRealizada;
-    wrap.appendChild(stepPaso_('6. Revisión', revisionOk, [
+    wrap.appendChild(stepPaso_('8. Revisión', revisionOk, [
+      plazoItem_(c),
       checkItem_('Revisión interna aprobada', c.revisionInterna, function (v) { update_(s, 'revisionInterna', v); })
     ]));
+
     var facturaOk = revisionOk && c.revisionInterna;
-    wrap.appendChild(stepPaso_('7. Facturación y cierre', facturaOk, [
+    wrap.appendChild(stepPaso_('9. Facturación y cierre', facturaOk, [
       checkItem_('Factura solicitada', c.facturaSolicitada, function (v) { update_(s, 'facturaSolicitada', v); }),
       checkItem_('Envío final (factura + informe) enviado', c.envioFinal, function (v) { update_(s, 'envioFinal', v); })
     ]));
 
     return wrap;
+  }
+
+  function parseCarpetas(valor) {
+    return String(valor || '').split('\n')
+      .map(function (l) { return l.trim(); })
+      .filter(function (l) { return !!l; })
+      .map(function (l) {
+        var p = l.split('|').map(function (x) { return x.trim(); });
+        return { tipo: p[0] || '', carpeta: p[1] || '', fotos: p[2] || '' };
+      });
+  }
+
+  // Check que solo se puede tildar si ya se cumplio su condicion (por ejemplo,
+  // haber subido archivos). Bloqueado explica por que, en vez de no responder.
+  function checkItemCondicionado_(texto, valor, onChange, habilitado, motivo) {
+    var div = checkItem_(texto, valor, onChange);
+    if (!habilitado && !valor) {
+      var input = div.querySelector('input[type="checkbox"]');
+      input.disabled = true;
+      div.style.opacity = '.6';
+      var nota = document.createElement('div');
+      nota.style.cssText = 'font-size:11px;color:var(--ink-soft);margin-top:2px;';
+      nota.textContent = motivo;
+      div.appendChild(nota);
+    }
+    return div;
+  }
+
+  // Tecnicos: varios por medicion, tomados de la lista del equipo.
+  function tecnicosItem_(s, c, update_) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+
+    var lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;';
+    lbl.textContent = 'Técnico/s asignado/s';
+    div.appendChild(lbl);
+
+    var asignados = String(c.tecnicoAsignado || '').split(',')
+      .map(function (x) { return x.trim(); }).filter(function (x) { return !!x; });
+
+    var cont = document.createElement('div');
+    cont.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px;';
+    EQUIPO.forEach(function (p) {
+      var fila = document.createElement('label');
+      fila.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;';
+      var chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = asignados.indexOf(p.nombre) !== -1;
+      chk.addEventListener('change', function () {
+        var lista = asignados.filter(function (n) { return n !== p.nombre; });
+        if (chk.checked) lista.push(p.nombre);
+        update_(s, 'tecnicoAsignado', lista.join(', '));
+      });
+      fila.appendChild(chk);
+      fila.appendChild(document.createTextNode(p.nombre));
+      cont.appendChild(fila);
+    });
+    div.appendChild(cont);
+
+    var aviso = document.createElement('div');
+    aviso.style.cssText = 'font-size:11.5px;margin-top:6px;';
+
+    var mail = document.createElement('button');
+    mail.type = 'button';
+    mail.className = 'btn';
+    mail.style.cssText = 'margin-top:8px;font-size:12px;';
+    mail.textContent = '✉ Avisar por mail al/los técnico/s';
+    mail.disabled = !asignados.length;
+    mail.title = asignados.length ? 'Envía el aviso con fecha, equipos y dirección' : 'Elegí al menos un técnico';
+    mail.addEventListener('click', function () {
+      if (!confirm('Se va a enviar un mail a: ' + asignados.join(', ') + '.\n\n¿Confirmás?')) return;
+      mail.disabled = true;
+      callBackend('avisarTecnicos', { presupuestoGH: s.presupuestoGH, empresa: s.empresa })
+        .then(function (d) {
+          mail.disabled = false;
+          if (!respuestaOk(d, 'No se pudo enviar')) return;
+          aviso.style.color = 'var(--verde)';
+          aviso.textContent = 'Aviso enviado a ' + (d.enviadosA || []).join(', ');
+        }).catch(function () { mail.disabled = false; aviso.style.color = 'var(--rojo)'; aviso.textContent = 'No se pudo conectar.'; });
+    });
+    div.appendChild(mail);
+    div.appendChild(aviso);
+    return div;
+  }
+
+  function fechaCoordinadaItem_(s, c, update_) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+    var lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;';
+    lbl.textContent = 'Fecha coordinada de monitoreo';
+    div.appendChild(lbl);
+    var input = document.createElement('input');
+    input.type = 'date';
+    input.value = c.fechaCoordinada || '';
+    input.style.marginTop = '4px';
+    input.addEventListener('change', function () { update_(s, 'fechaCoordinada', input.value); });
+    div.appendChild(input);
+    var nota = document.createElement('div');
+    nota.style.cssText = 'font-size:11px;color:var(--ink-soft);margin-top:4px;';
+    nota.textContent = 'Al cargarla, la carpeta pasa a llamarse "Medicion " + esta fecha.';
+    div.appendChild(nota);
+    return div;
+  }
+
+  // Links a las carpetas de registro fotografico: las fotos se copian a mano.
+  function carpetasFotosItem_(carpetas) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+    var lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;';
+    lbl.textContent = 'Registro fotográfico';
+    div.appendChild(lbl);
+
+    if (!carpetas.length) {
+      var vacio = document.createElement('div');
+      vacio.style.cssText = 'font-size:11.5px;color:var(--ink-soft);margin-top:4px;';
+      vacio.textContent = 'Las carpetas se crean al generar la Orden de Trabajo.';
+      div.appendChild(vacio);
+      return div;
+    }
+    var fila = document.createElement('div');
+    fila.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;';
+    carpetas.forEach(function (cp) {
+      var a = document.createElement('a');
+      a.href = cp.fotos || cp.carpeta;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'btn';
+      a.style.cssText = 'text-decoration:none;font-size:12px;';
+      a.textContent = '📁 Fotos ' + cp.tipo;
+      fila.appendChild(a);
+    });
+    div.appendChild(fila);
+    return div;
+  }
+
+  // Subida de archivos de un paso, con la lista de lo ya subido.
+  function subirArchivosItem_(s, c, destino, titulo, ayuda, accept, yaSubidos, tipos) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+
+    var lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;';
+    lbl.textContent = titulo;
+    div.appendChild(lbl);
+
+    if (yaSubidos.length) {
+      var lista = document.createElement('div');
+      lista.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;';
+      yaSubidos.forEach(function (a) {
+        var link = document.createElement('a');
+        link.href = a.url; link.target = '_blank'; link.rel = 'noopener';
+        link.className = 'btn';
+        link.style.cssText = 'text-decoration:none;font-size:12px;';
+        link.textContent = '📎 ' + (a.tipo || 'archivo');
+        lista.appendChild(link);
+      });
+      div.appendChild(lista);
+    }
+
+    var selTipo = null;
+    if (tipos && tipos.length) {
+      selTipo = document.createElement('select');
+      selTipo.style.marginTop = '4px';
+      tipos.forEach(function (t) {
+        var o = document.createElement('option'); o.value = t; o.textContent = t;
+        selTipo.appendChild(o);
+      });
+      div.appendChild(selTipo);
+    }
+
+    var estado = document.createElement('div');
+    estado.style.cssText = 'font-size:11.5px;margin-top:4px;';
+
+    var file = document.createElement('input');
+    file.type = 'file';
+    if (accept) file.accept = accept;
+    file.style.display = 'none';
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.style.cssText = 'margin-top:6px;font-size:12px;';
+    btn.textContent = '⬆ Subir archivo';
+    btn.title = ayuda;
+    btn.addEventListener('click', function () { file.click(); });
+
+    file.addEventListener('change', function () {
+      var f = file.files[0];
+      if (!f) return;
+      btn.disabled = true;
+      estado.style.color = 'var(--ink-soft)';
+      estado.textContent = 'Subiendo ' + f.name + '…';
+      var reader = new FileReader();
+      reader.onload = function () {
+        callBackend('subirArchivoPaso', {
+          presupuestoGH: s.presupuestoGH, empresa: s.empresa, ordenCompra: s.ordenCompra,
+          destino: destino, tipo: selTipo ? selTipo.value : '',
+          filename: f.name, contentMimeType: f.type || 'application/octet-stream',
+          fileBase64: reader.result.split(',')[1]
+        }).then(function (d) {
+          btn.disabled = false;
+          if (!respuestaOk(d, 'No se pudo subir')) return;
+          SERVICIOS = d.servicios;
+          render();
+        }).catch(function () { btn.disabled = false; estado.style.color = 'var(--rojo)'; estado.textContent = 'No se pudo conectar.'; });
+      };
+      reader.onerror = function () { btn.disabled = false; estado.style.color = 'var(--rojo)'; estado.textContent = 'No se pudo leer el archivo.'; };
+      reader.readAsDataURL(f);
+    });
+
+    var hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;color:var(--ink-soft);margin-top:2px;';
+    hint.textContent = ayuda;
+    div.appendChild(btn);
+    div.appendChild(file);
+    div.appendChild(hint);
+    div.appendChild(estado);
+    return div;
+  }
+
+  // Plazo de 20 dias corridos desde que se marca la medicion como realizada.
+  function plazoItem_(c) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+    if (!c.medicionRealizada || !c.fechaMedicionRealizada) {
+      var n = document.createElement('div');
+      n.style.cssText = 'font-size:11.5px;color:var(--ink-soft);';
+      n.textContent = 'El plazo de 20 días arranca cuando se marca la medición como realizada.';
+      div.appendChild(n);
+      return div;
+    }
+    var inicio = new Date(c.fechaMedicionRealizada);
+    var limite = new Date(inicio.getTime() + 20 * 24 * 60 * 60 * 1000);
+    var faltan = Math.ceil((limite - new Date()) / (24 * 60 * 60 * 1000));
+    var caja = document.createElement('div');
+    caja.style.cssText = 'font-size:13px;font-weight:700;';
+    if (faltan > 5) { caja.style.color = 'var(--verde)'; caja.textContent = 'Quedan ' + faltan + ' días para entregar informe y factura'; }
+    else if (faltan >= 0) { caja.style.color = 'var(--naranja)'; caja.textContent = '¡Quedan ' + faltan + ' días! Vence el ' + limite.toLocaleDateString('es-AR'); }
+    else { caja.style.color = 'var(--rojo)'; caja.textContent = 'Vencido hace ' + Math.abs(faltan) + ' días (límite ' + limite.toLocaleDateString('es-AR') + ')'; }
+    div.appendChild(caja);
+    return div;
   }
 
   function stepPaso_(titulo, desbloqueado, items) {
