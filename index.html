@@ -615,11 +615,13 @@
     var div = document.createElement('div');
     div.className = 'check-item';
     div.style.flexDirection = 'column';
-    div.innerHTML = '<label style="font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">Orden de Trabajo (link al PDF)</label>';
+    div.innerHTML = '<label style="font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">Orden de Trabajo</label>';
 
     var row = document.createElement('div');
     row.style.display = 'flex';
     row.style.gap = '6px';
+    row.style.flexWrap = 'wrap';
+    row.style.alignItems = 'center';
 
     var input = document.createElement('input');
     input.type = 'text';
@@ -627,10 +629,40 @@
     input.value = c.otUrl || '';
     input.addEventListener('blur', function () { if (input.value !== c.otUrl) update_(s, 'otUrl', input.value); });
 
+    // Ya generada: en vez del link pelado, un boton que la abre para imprimir.
+    // El campo de texto queda escondido detras de "Cambiar" por si hay que
+    // reemplazarla a mano.
+    if (c.otUrl) {
+      input.style.display = 'none';
+
+      var abrir = document.createElement('a');
+      abrir.href = c.otUrl;
+      abrir.target = '_blank';
+      abrir.rel = 'noopener';
+      abrir.className = 'btn primary';
+      abrir.style.textDecoration = 'none';
+      abrir.textContent = '🖨 Abrir OT para imprimir';
+
+      var cambiar = document.createElement('button');
+      cambiar.type = 'button';
+      cambiar.className = 'btn';
+      cambiar.style.fontSize = '11.5px';
+      cambiar.textContent = 'Cambiar';
+      cambiar.title = 'Pegar otro link de OT a mano';
+      cambiar.addEventListener('click', function () {
+        input.style.display = input.style.display === 'none' ? '' : 'none';
+        if (input.style.display === '') input.focus();
+      });
+
+      row.appendChild(abrir);
+      row.appendChild(cambiar);
+    }
+
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn';
-    btn.textContent = 'Generar OT';
+    btn.style.fontSize = c.otUrl ? '11.5px' : '';
+    btn.textContent = c.otUrl ? 'Regenerar' : 'Generar OT';
     btn.title = 'Genera la OT a partir de la cotización, quitando precios y quedándose solo con las mediciones';
 
     var estado = document.createElement('div');
@@ -700,26 +732,55 @@
   // "Estandar" la arma desde el template elegido y le completa los datos de la
   // empresa; "personalizada" sube el Excel armado a mano y le completa el mismo
   // rotulo. En los dos casos queda en 1. INFORMES / {empresa} / Mediciones {fecha} / {tipo}.
+  // Las CC generadas se guardan como "tipo | url", una por linea, porque una
+  // campaña puede tener varias mediciones y por lo tanto varias CC.
+  function parseCCs(valor) {
+    return String(valor || '').split('\n')
+      .map(function (l) { return l.trim(); })
+      .filter(function (l) { return !!l; })
+      .map(function (l) {
+        var i = l.indexOf('|');
+        if (i === -1) return { tipo: '', url: l };
+        return { tipo: l.slice(0, i).trim(), url: l.slice(i + 1).trim() };
+      });
+  }
+
+  // Paso de Cadena de Custodia. Arriba las CC ya generadas, cada una con su
+  // boton para imprimir; en el medio la generacion (estandar desde template o
+  // personalizada subiendo el Excel); y al final el tilde de "ya estan impresas".
   function ccItemConBotones_(s, c, update_) {
     var div = document.createElement('div');
     div.className = 'check-item';
     div.style.flexDirection = 'column';
 
-    var top = checkItem_('Cadena de Custodia lista', c.ccLista, function (v) { update_(s, 'ccLista', v); });
-    top.style.marginBottom = '4px';
-    div.appendChild(top);
+    var titulo = document.createElement('label');
+    titulo.style.cssText = 'font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;';
+    titulo.textContent = 'Cadena de Custodia';
+    div.appendChild(titulo);
 
-    var link = document.createElement('input');
-    link.type = 'text';
-    link.placeholder = 'Link a la CC (https://drive.google.com/...)';
-    link.value = c.ccUrl || '';
-    link.style.marginLeft = '24px';
-    link.addEventListener('blur', function () { if (link.value !== c.ccUrl) update_(s, 'ccUrl', link.value); });
-    div.appendChild(link);
+    var generadas = parseCCs(c.ccUrl);
 
+    // --- 1. las que ya existen, listas para imprimir ---
+    if (generadas.length) {
+      var lista = document.createElement('div');
+      lista.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px;';
+      generadas.forEach(function (cc) {
+        var a = document.createElement('a');
+        a.href = cc.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.className = 'btn primary';
+        a.style.textDecoration = 'none';
+        a.textContent = '🖨 ' + (cc.tipo || 'Cadena de custodia');
+        a.title = 'Abrir para imprimir';
+        lista.appendChild(a);
+      });
+      div.appendChild(lista);
+    }
+
+    // --- 2. generar una nueva ---
     var caja = document.createElement('div');
-    caja.style.marginLeft = '24px';
-    caja.style.marginTop = '8px';
+    caja.style.cssText = 'padding-top:8px;border-top:1px solid var(--line);';
 
     var sel = document.createElement('select');
     var vacia = document.createElement('option');
@@ -734,8 +795,7 @@
     });
 
     var estado = document.createElement('div');
-    estado.style.fontSize = '11.5px';
-    estado.style.marginTop = '4px';
+    estado.style.cssText = 'font-size:11.5px;margin-top:4px;';
     function fallo_(msg) { estado.style.color = 'var(--rojo)'; estado.textContent = msg; }
     function aviso_(msg) { estado.style.color = 'var(--ink-soft)'; estado.textContent = msg; }
 
@@ -769,7 +829,7 @@
 
     var btnStd = document.createElement('button');
     btnStd.type = 'button';
-    btnStd.className = 'btn primary';
+    btnStd.className = 'btn';
     btnStd.textContent = 'Generar CC estándar';
     btnStd.addEventListener('click', function () {
       if (!sel.value) { fallo_('Elegí primero el tipo de cadena de custodia.'); return; }
@@ -815,10 +875,7 @@
     });
 
     var fila = document.createElement('div');
-    fila.style.display = 'flex';
-    fila.style.gap = '6px';
-    fila.style.flexWrap = 'wrap';
-    fila.style.marginTop = '6px';
+    fila.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;';
     fila.appendChild(btnStd);
     fila.appendChild(btnPers);
 
@@ -827,6 +884,15 @@
     caja.appendChild(archivo);
     caja.appendChild(estado);
     div.appendChild(caja);
+
+    // --- 3. al final, el tilde de que ya estan impresas ---
+    var cierre = document.createElement('div');
+    cierre.style.cssText = 'margin-top:10px;padding-top:8px;border-top:1px solid var(--line);';
+    var tilde = checkItem_('Ya tengo la/s cadena/s de custodia impresas', c.ccLista,
+      function (v) { update_(s, 'ccLista', v); });
+    cierre.appendChild(tilde);
+    div.appendChild(cierre);
+
     return div;
   }
 
