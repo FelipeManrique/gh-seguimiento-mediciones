@@ -741,9 +741,15 @@
     mail.className = 'btn';
     mail.style.cssText = 'margin-top:8px;font-size:12px;';
     mail.textContent = '✉ Avisar por mail al/los técnico/s';
-    mail.disabled = !asignados.length;
-    mail.title = asignados.length ? 'Envía el aviso con fecha, equipos y dirección' : 'Elegí al menos un técnico';
+    mail.title = 'Envía el aviso con fecha, equipos y dirección';
     mail.addEventListener('click', function () {
+      // Antes el boton quedaba deshabilitado y al clickearlo no pasaba nada;
+      // ahora dice por que no puede enviarse.
+      if (!asignados.length) {
+        aviso.style.color = 'var(--rojo)';
+        aviso.textContent = 'Primero marcá al menos un técnico en la lista de arriba.';
+        return;
+      }
       if (!confirm('Se va a enviar un mail a: ' + asignados.join(', ') + '.\n\n¿Confirmás?')) return;
       mail.disabled = true;
       callBackend('avisarTecnicos', { presupuestoGH: s.presupuestoGH, empresa: s.empresa })
