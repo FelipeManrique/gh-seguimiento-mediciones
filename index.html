@@ -425,8 +425,8 @@
     entregado: { label: 'Entregado', color: 'verde', bucket: 'entregado' }
   };
 
-  var CALIB_LABEL = { verde: 'Equipos OK', amarillo: 'Vence pronto', naranja: 'Vence pronto', rojo: 'Equipo vencido', sin_match: 'Revisar a mano', gris: 'Sin fecha' };
-  var CALIB_COLOR = { verde: 'verde', amarillo: 'amarillo', naranja: 'naranja', rojo: 'rojo', sin_match: 'gris', gris: 'gris' };
+  var CALIB_LABEL = { verde: 'Equipos OK', amarillo: 'Vence pronto', naranja: 'Vence pronto', rojo: 'Equipo vencido', sin_match: 'Revisar a mano', sin_equipo: 'No requiere equipo', gris: 'Sin fecha' };
+  var CALIB_COLOR = { verde: 'verde', amarillo: 'amarillo', naranja: 'naranja', rojo: 'rojo', sin_match: 'gris', sin_equipo: 'azul', gris: 'gris' };
 
   function checklistProgreso(servicio) {
     var c = servicio.checklist;
@@ -559,7 +559,14 @@
       return '<tr>' +
         '<td>' + (m.tipoMuestra || '—') + (m.cantidadMuestras ? ' <span style="color:var(--ink-soft);">(' + m.cantidadMuestras + ')</span>' : '') + '</td>' +
         '<td>' + (m.derivacionLab ? m.derivacionLab + (m.presupuestoLab ? ' · ppto ' + m.presupuestoLab : '') : 'Directa') + '</td>' +
-        '<td><span class="badge ' + CALIB_COLOR[calib.estado] + '">' + CALIB_LABEL[calib.estado] + '</span></td>' +
+        '<td><span class="badge ' + (CALIB_COLOR[calib.estado] || 'gris') + '">' +
+          (CALIB_LABEL[calib.estado] || calib.estado) + '</span>' +
+          ((calib.equipos || []).length
+            ? '<div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">' +
+              calib.equipos.map(function (eq) {
+                return eq.equipo + (eq.fecha_venc ? ' · vence ' + eq.fecha_venc : ' · sin fecha');
+              }).join('<br>') + '</div>'
+            : '') + '</td>' +
         '<td>' + (m.entregaInforme ? 'Informe listo' : (m.entregaResultados ? 'Resultados OK, falta informe' : 'Pendiente')) + (m.entregaFecha ? ' · ' + m.entregaFecha : '') + '</td>' +
         '<td>' + (m.facturaServicio.numero ? 'Nº ' + m.facturaServicio.numero : '—') + '</td>' +
         '</tr>';
@@ -611,7 +618,7 @@
       .filter(function (t) { return !!t; });
 
     wrap.appendChild(stepPaso_('1. Ingreso', true, [
-      textItem_('Cotización (link al PDF)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); })
+      cotizacionItem_(s, c, update_)
     ]));
 
     wrap.appendChild(stepPaso_('2. Orden de Trabajo', !!c.cotizacionUrl, [
@@ -619,10 +626,15 @@
     ]));
 
     var ccOk = !!c.otUrl;
-    wrap.appendChild(stepPaso_('3. Cadena de Custodia', ccOk, [
+    var pasoCC = stepPaso_('3. Cadena de Custodia', ccOk, [
       checkItem_('Mantenimiento / insumos del equipo', c.mantenimientoEquipo, function (v) { update_(s, 'mantenimientoEquipo', v); }),
       ccItemConBotones_(s, c, update_)
-    ]));
+    ]);
+    // a lo ancho: la eleccion de CC y sus botones van debajo del check de
+    // mantenimiento, no en la columna de al lado
+    var grillaCC = pasoCC.querySelector('.checklist');
+    if (grillaCC) grillaCC.style.gridTemplateColumns = '1fr';
+    wrap.appendChild(pasoCC);
 
     // 4. Tecnicos: recien despues del tilde de CC impresas
     var tecnicosOk = ccOk && c.ccLista;
@@ -643,7 +655,8 @@
     // 6. Fecha coordinada: recien despues del check de ingreso
     var fechaOk = ingresoOk && c.ingresoGestionado;
     wrap.appendChild(stepPaso_('6. Fecha coordinada', fechaOk, [
-      fechaCoordinadaItem_(s, c, update_)
+      fechaCoordinadaItem_(s, c, update_),
+      ccParaImprimirItem_(c)
     ]));
 
     // 7. Ejecucion: la medicion se marca realizada solo con las CC llenas subidas
@@ -762,6 +775,43 @@
     });
     div.appendChild(mail);
     div.appendChild(aviso);
+    return div;
+  }
+
+  // Botones para imprimir las CC ya generadas. Van con la fecha de muestreo
+  // porque es el momento en que se imprimen y se llevan a campo.
+  function ccParaImprimirItem_(c) {
+    var generadas = parseCCs(c.ccUrl);
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+
+    var lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;';
+    lbl.textContent = 'Cadenas de custodia para imprimir';
+    div.appendChild(lbl);
+
+    if (!generadas.length) {
+      var vacio = document.createElement('div');
+      vacio.style.cssText = 'font-size:11.5px;color:var(--ink-soft);margin-top:4px;';
+      vacio.textContent = 'Todavía no se generó ninguna (paso 3).';
+      div.appendChild(vacio);
+      return div;
+    }
+    var lista = document.createElement('div');
+    lista.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;';
+    generadas.forEach(function (cc) {
+      var a = document.createElement('a');
+      a.href = cc.url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'btn primary';
+      a.style.textDecoration = 'none';
+      a.textContent = '🖨 ' + (cc.tipo || 'Cadena de custodia');
+      a.title = 'Abrir para imprimir';
+      lista.appendChild(a);
+    });
+    div.appendChild(lista);
     return div;
   }
 
@@ -1078,6 +1128,72 @@
     return div;
   }
 
+  // Si la cotizacion se corrige despues de cargada, se puede subir la nueva sin
+  // pasar por "+ Nueva medicion": reemplaza el archivo y el link de este paso.
+  function cotizacionItem_(s, c, update_) {
+    var div = textItem_('Cotización (link al archivo)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); });
+    var cont = div.querySelector('.field-inputs');
+
+    var fila = document.createElement('div');
+    fila.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;';
+
+    var archivo = document.createElement('input');
+    archivo.type = 'file';
+    archivo.accept = '.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    archivo.style.display = 'none';
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.style.fontSize = '11.5px';
+    btn.textContent = c.cotizacionUrl ? '⬆ Subir cotización corregida' : '⬆ Subir cotización';
+    btn.title = 'Reemplaza la cotización de esta medición por una nueva versión';
+    btn.addEventListener('click', function () { archivo.click(); });
+
+    var estado = document.createElement('div');
+    estado.style.cssText = 'font-size:11.5px;margin-top:4px;';
+
+    archivo.addEventListener('change', function () {
+      var f = archivo.files[0];
+      if (!f) return;
+      btn.disabled = true;
+      estado.style.color = 'var(--ink-soft)';
+      estado.textContent = 'Subiendo ' + f.name + '…';
+      var reader = new FileReader();
+      reader.onload = function () {
+        callBackend('reemplazarCotizacion', {
+          presupuestoGH: s.presupuestoGH, empresa: s.empresa, ordenCompra: s.ordenCompra,
+          filename: f.name, contentMimeType: f.type ||
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          fileBase64: reader.result.split(',')[1]
+        }).then(function (d) {
+          btn.disabled = false;
+          if (!respuestaOk(d, 'No se pudo subir')) return;
+          SERVICIOS = d.servicios;
+          render();
+        }).catch(function () {
+          btn.disabled = false;
+          estado.style.color = 'var(--rojo)';
+          estado.textContent = 'No se pudo conectar.';
+        });
+      };
+      reader.onerror = function () { btn.disabled = false; estado.style.color = 'var(--rojo)'; estado.textContent = 'No se pudo leer el archivo.'; };
+      reader.readAsDataURL(f);
+    });
+
+    fila.appendChild(btn);
+    fila.appendChild(archivo);
+    cont.appendChild(fila);
+    cont.appendChild(estado);
+    if (c.cotizacionUrl) {
+      var nota = document.createElement('div');
+      nota.style.cssText = 'font-size:11px;color:var(--ink-soft);margin-top:2px;';
+      nota.textContent = 'Si la subís de nuevo, acordate de regenerar la OT.';
+      cont.appendChild(nota);
+    }
+    return div;
+  }
+
   function textItem_(labelText, value, onChange) {
     var div = document.createElement('div');
     div.className = 'check-item';
@@ -1121,29 +1237,9 @@
     titulo.textContent = 'Cadena de Custodia';
     div.appendChild(titulo);
 
-    var generadas = parseCCs(c.ccUrl);
-
-    // --- 1. las que ya existen, listas para imprimir ---
-    if (generadas.length) {
-      var lista = document.createElement('div');
-      lista.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px;';
-      generadas.forEach(function (cc) {
-        var a = document.createElement('a');
-        a.href = cc.url;
-        a.target = '_blank';
-        a.rel = 'noopener';
-        a.className = 'btn primary';
-        a.style.textDecoration = 'none';
-        a.textContent = '🖨 ' + (cc.tipo || 'Cadena de custodia');
-        a.title = 'Abrir para imprimir';
-        lista.appendChild(a);
-      });
-      div.appendChild(lista);
-    }
-
-    // --- 2. generar una nueva ---
+    // Los botones para imprimir no van aca: se muestran junto a la fecha de
+    // muestreo, que es cuando el tecnico las necesita (ver ccParaImprimirItem_).
     var caja = document.createElement('div');
-    caja.style.cssText = 'padding-top:8px;border-top:1px solid var(--line);';
 
     // Por defecto solo las CC que corresponden a los tipos de medicion de esta
     // campaña; el link de abajo despliega los 16 por si hace falta otra.
