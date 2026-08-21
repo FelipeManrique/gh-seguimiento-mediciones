@@ -996,6 +996,21 @@
       row.appendChild(cambiar);
     }
 
+    // Contacto de campo: normalmente ya viene en la cotizacion, pero se puede
+    // sobreescribir aca. Vacios = se respeta lo que diga la cotizacion.
+    var contactoWrap = document.createElement('div');
+    contactoWrap.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;width:100%;';
+    var inContacto = document.createElement('input');
+    inContacto.type = 'text';
+    inContacto.placeholder = 'Contacto de campo (opcional)';
+    inContacto.style.cssText = 'flex:1;min-width:150px;';
+    var inTelefono = document.createElement('input');
+    inTelefono.type = 'text';
+    inTelefono.placeholder = 'Teléfono (opcional)';
+    inTelefono.style.cssText = 'flex:1;min-width:120px;';
+    contactoWrap.appendChild(inContacto);
+    contactoWrap.appendChild(inTelefono);
+
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn';
@@ -1016,12 +1031,21 @@
       btn.disabled = true;
       estado.style.color = 'var(--ink-soft)';
       estado.textContent = 'Generando...';
-      callBackend('generarOT', { presupuestoGH: s.presupuestoGH, empresa: s.empresa, cotizacionUrl: c.cotizacionUrl }).then(function (data) {
+      callBackend('generarOT', {
+        presupuestoGH: s.presupuestoGH, empresa: s.empresa, ordenCompra: s.ordenCompra,
+        cotizacionUrl: c.cotizacionUrl,
+        contactoCampo: inContacto.value.trim(),
+        telefonoCampo: inTelefono.value.trim()
+      }).then(function (data) {
         btn.disabled = false;
         if (!data.ok) {
           estado.style.color = 'var(--rojo)';
           estado.textContent = 'Error: ' + (data.error || 'desconocido');
           return;
+        }
+        if (data.avisoFormato) {
+          estado.style.color = 'var(--naranja)';
+          estado.textContent = data.avisoFormato;
         }
         SERVICIOS = data.servicios;
         render();
@@ -1035,6 +1059,7 @@
     row.appendChild(input);
     row.appendChild(btn);
     div.appendChild(row);
+    div.appendChild(contactoWrap);
     div.appendChild(estado);
     return div;
   }
