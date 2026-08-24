@@ -250,6 +250,7 @@
   // Los tipos de CC salen de la carpeta real en Drive, asi que si agregan o
   // renombran alguno el desplegable se actualiza sin tocar este archivo.
   var TEMPLATES_CC = [];
+  var RESPONSABLES_FACTURA = [];
   // Equipo (nombre + mail) que llega del backend: alimenta el desplegable de
   // tecnicos y el aviso por mail.
   var EQUIPO = [];
@@ -682,7 +683,7 @@
 
     var facturaOk = revisionOk && c.revisionInterna;
     wrap.appendChild(stepPaso_('9. Facturación y cierre', facturaOk, [
-      checkItem_('Factura solicitada', c.facturaSolicitada, function (v) { update_(s, 'facturaSolicitada', v); }),
+      solicitarFacturaItem_(s, c, update_),
       checkItem_('Envío final (factura + informe) enviado', c.envioFinal, function (v) { update_(s, 'envioFinal', v); })
     ]));
 
@@ -814,6 +815,92 @@
       lista.appendChild(a);
     });
     div.appendChild(lista);
+    return div;
+  }
+
+  // Paso 9: en vez de un check manual, se elige a quien emite la factura y el
+  // boton manda el pedido por mail y deja creada la carpeta donde subirla.
+  function solicitarFacturaItem_(s, c, update_) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+
+    var lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;';
+    lbl.textContent = 'Solicitar factura';
+    div.appendChild(lbl);
+
+    var yaPedida = String(c.facturaSolicitadaA || '');
+    if (yaPedida) {
+      var partes = yaPedida.split('|').map(function (x) { return x.trim(); });
+      var info = document.createElement('div');
+      info.style.cssText = 'font-size:12.5px;color:var(--ink-soft);margin:4px 0 6px;';
+      info.textContent = 'Solicitada a ' + (partes[0] || '\u2014');
+      div.appendChild(info);
+      if (partes[1]) {
+        var carp = document.createElement('a');
+        carp.href = partes[1];
+        carp.target = '_blank';
+        carp.rel = 'noopener';
+        carp.className = 'btn';
+        carp.style.cssText = 'text-decoration:none;font-size:12px;margin-bottom:6px;display:inline-block;';
+        carp.textContent = '\uD83D\uDCC4 Carpeta de la factura';
+        div.appendChild(carp);
+      }
+    }
+
+    var grupo = document.createElement('div');
+    grupo.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px;';
+    var elegido = null;
+    var nombreRadio = 'fact-' + String(s.presupuestoGH || s.empresa).replace(/\W/g, '');
+    RESPONSABLES_FACTURA.forEach(function (p) {
+      var fila = document.createElement('label');
+      fila.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;';
+      var r = document.createElement('input');
+      r.type = 'radio';
+      r.name = nombreRadio;
+      r.addEventListener('change', function () { if (r.checked) elegido = p.nombre; });
+      fila.appendChild(r);
+      fila.appendChild(document.createTextNode(p.nombre));
+      grupo.appendChild(fila);
+    });
+    div.appendChild(grupo);
+
+    var estado = document.createElement('div');
+    estado.style.cssText = 'font-size:11.5px;margin-top:6px;';
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn primary';
+    btn.style.cssText = 'margin-top:8px;font-size:12px;';
+    btn.textContent = yaPedida ? '\u2709 Volver a solicitar factura' : '\u2709 Solicitar factura';
+    btn.addEventListener('click', function () {
+      if (!elegido) {
+        estado.style.color = 'var(--rojo)';
+        estado.textContent = 'Eleg\u00ed a qui\u00e9n pedirle la factura.';
+        return;
+      }
+      if (!confirm('Se le va a pedir la factura a ' + elegido + ' por mail.\n\n\u00bfConfirm\u00e1s?')) return;
+      btn.disabled = true;
+      estado.style.color = 'var(--ink-soft)';
+      estado.textContent = 'Enviando\u2026';
+      callBackend('solicitarFactura', {
+        presupuestoGH: s.presupuestoGH, empresa: s.empresa, ordenCompra: s.ordenCompra,
+        responsable: elegido
+      }).then(function (d) {
+        btn.disabled = false;
+        if (!respuestaOk(d, 'No se pudo solicitar')) return;
+        SERVICIOS = d.servicios;
+        render();
+      }).catch(function () {
+        btn.disabled = false;
+        estado.style.color = 'var(--rojo)';
+        estado.textContent = 'No se pudo conectar.';
+      });
+    });
+
+    div.appendChild(btn);
+    div.appendChild(estado);
     return div;
   }
 
