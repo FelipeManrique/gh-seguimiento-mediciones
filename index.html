@@ -423,7 +423,9 @@
     if (c.facturaSolicitada || c.revisionInterna) return 'revision';
     if (c.medicionRealizada) return esperandoLab_() ? 'esperandoLab' : 'revision';
     if (c.fechaCoordinada || c.ingresoGestionado || String(c.tecnicoAsignado || '').trim()) return 'campo';
-    if (c.otUrl) return 'ingreso';
+    // Con cotizacion cargada ya esta en ingreso, aunque la planilla traiga una
+    // fecha heredada de la fila de arriba por las celdas combinadas.
+    if (c.otUrl || c.cotizacionUrl) return 'ingreso';
 
     // Sin checklist cargado (las mediciones viejas), se usan los datos de la planilla
     if (!servicio.fechaMuestreo) return 'ingreso';
