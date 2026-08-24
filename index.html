@@ -210,10 +210,12 @@
       <div style="display:flex;gap:8px;">
         <button class="btn" id="clearFilter">Ver todos</button>
         <button class="btn" id="refreshBtn" title="Releer los datos desde el servidor">Actualizar</button>
+        <button class="btn" id="borradosBtn" title="Ver y recuperar mediciones eliminadas">🗑 Borrados</button>
       </div>
     </div>
 
-    <div id="avisoGlobal" style="display:none;border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;background:var(--card);"></div>
+    <div id="vistaBorrados" style="display:none;"></div>
+      <div id="avisoGlobal" style="display:none;border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;background:var(--card);"></div>
       <div id="lista"></div>
 
     <button type="button" class="fab-nuevo" id="nuevaMedicionBtn">+ Nueva medición</button>
@@ -384,6 +386,107 @@
     }
     return false;
   }
+
+  // Vista de papelera: reemplaza la lista de mediciones, no se mezcla con ella.
+  var VIENDO_BORRADOS = false;
+
+  function alternarVistaBorrados(mostrar) {
+    VIENDO_BORRADOS = mostrar;
+    document.getElementById('vistaBorrados').style.display = mostrar ? 'block' : 'none';
+    document.getElementById('lista').style.display = mostrar ? 'none' : '';
+    document.querySelector('.stats').style.display = mostrar ? 'none' : '';
+    var leyenda = document.querySelector('.legend');
+    if (leyenda) leyenda.style.display = mostrar ? 'none' : '';
+    var buscador = document.getElementById('search');
+    if (buscador) buscador.style.display = mostrar ? 'none' : '';
+    var nueva = document.getElementById('nuevaMedicionBtn');
+    if (nueva) nueva.style.display = mostrar ? 'none' : '';
+    document.getElementById('borradosBtn').textContent = mostrar ? '← Volver' : '🗑 Borrados';
+    if (!mostrar) render();
+  }
+
+  function pintarBorrados(lista) {
+    var cont = document.getElementById('vistaBorrados');
+    cont.innerHTML = '';
+
+    var titulo = document.createElement('div');
+    titulo.style.cssText = 'font-size:15px;font-weight:700;margin-bottom:4px;';
+    titulo.textContent = 'Mediciones eliminadas';
+    cont.appendChild(titulo);
+
+    var ayuda = document.createElement('div');
+    ayuda.style.cssText = 'font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;';
+    ayuda.textContent = 'Al recuperar, vuelven a la planilla y al seguimiento, y la carpeta sale de la papelera de Drive.';
+    cont.appendChild(ayuda);
+
+    if (!lista.length) {
+      var vacio = document.createElement('div');
+      vacio.className = 'servicio';
+      vacio.style.cssText = 'padding:18px;font-size:13px;color:var(--ink-soft);';
+      vacio.textContent = 'No hay mediciones eliminadas.';
+      cont.appendChild(vacio);
+      return;
+    }
+
+    lista.forEach(function (b) {
+      var card = document.createElement('div');
+      card.className = 'servicio';
+      card.style.padding = '14px 16px';
+
+      var fila = document.createElement('div');
+      fila.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;';
+
+      var izq = document.createElement('div');
+      var cuando = b.fechaBorrado ? new Date(b.fechaBorrado) : null;
+      izq.innerHTML =
+        '<div class="servicio-empresa">' + (b.empresa || '(sin empresa)') +
+          (b.presupuestoGH ? ' <span style="color:var(--ink-soft);font-weight:600;">· Presupuesto GH ' + b.presupuestoGH + '</span>' : '') + '</div>' +
+        '<div class="servicio-meta">' +
+          (b.mediciones.length ? b.mediciones.join(', ') : 'Sin mediciones registradas') +
+          (cuando && !isNaN(cuando) ? ' · Eliminada el ' + cuando.toLocaleDateString('es-AR') : '') +
+          (b.borradoPor ? ' por ' + b.borradoPor : '') +
+        '</div>';
+      fila.appendChild(izq);
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn primary';
+      btn.textContent = '↩ Recuperar';
+      btn.addEventListener('click', function () {
+        if (!confirm('¿Recuperar la medición de ' + (b.empresa || 'esta empresa') + '?')) return;
+        btn.disabled = true;
+        callBackend('restaurarServicio', { id: b.id }).then(function (d) {
+          btn.disabled = false;
+          if (!respuestaOk(d, 'No se pudo recuperar')) return;
+          SERVICIOS = d.servicios;
+          if (!d.carpetaRestaurada && b.carpetaCampania) {
+            avisar('Se recuperó la medición, pero la carpeta no pudo salir de la papelera de Drive. Revisala a mano.', 'error');
+          }
+          cargarBorrados();
+        }).catch(function () {
+          btn.disabled = false;
+          avisar('No se pudo conectar con el backend.', 'error');
+        });
+      });
+      fila.appendChild(btn);
+
+      card.appendChild(fila);
+      cont.appendChild(card);
+    });
+  }
+
+  function cargarBorrados() {
+    callBackend('listarBorrados', {}).then(function (d) {
+      if (!respuestaOk(d, 'No se pudieron leer los borrados')) return;
+      pintarBorrados(d.borrados || []);
+    }).catch(function () { avisar('No se pudo conectar con el backend.', 'error'); });
+  }
+
+  document.getElementById('borradosBtn').addEventListener('click', function () {
+    if (VIENDO_BORRADOS) { alternarVistaBorrados(false); return; }
+    alternarVistaBorrados(true);
+    cargarBorrados();
+  });
 
   document.getElementById('refreshBtn').addEventListener('click', function () {
     var btn = this;
