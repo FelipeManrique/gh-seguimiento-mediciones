@@ -408,7 +408,24 @@
     // Marcada a mano como terminada = el ciclo completo ya se cumplió (se
     // entregó, se facturó, se envió), aunque el seguimiento paso a paso nunca
     // se haya llenado. Cuenta como Entregado en el resumen.
-    if (!servicio.esNuevo && servicio.checklist.terminadoManual) return 'entregado';
+    var c = servicio.checklist || {};
+    if (!servicio.esNuevo && c.terminadoManual) return 'entregado';
+
+    // El paso a paso manda: refleja lo que realmente se hizo. Antes esto miraba
+    // solo las columnas de la planilla, que se cargan a mano y quedan atrasadas,
+    // y por eso el estado no se movia aunque el proceso avanzara.
+    function esperandoLab_() {
+      return servicio.necesitaDerivacion && servicio.mediciones.some(function (m) {
+        return (m.derivacionLab || m.presupuestoLab) && !m.entregaResultados;
+      });
+    }
+    if (c.envioFinal) return 'entregado';
+    if (c.facturaSolicitada || c.revisionInterna) return 'revision';
+    if (c.medicionRealizada) return esperandoLab_() ? 'esperandoLab' : 'revision';
+    if (c.fechaCoordinada || c.ingresoGestionado || String(c.tecnicoAsignado || '').trim()) return 'campo';
+    if (c.otUrl) return 'ingreso';
+
+    // Sin checklist cargado (las mediciones viejas), se usan los datos de la planilla
     if (!servicio.fechaMuestreo) return 'ingreso';
     var todasConInforme = servicio.mediciones.length > 0 && servicio.mediciones.every(function (m) { return !!m.entregaInforme; });
     if (!todasConInforme) {
@@ -472,7 +489,7 @@
         '<div class="servicio-meta">' + (s.mediciones.length ? (s.mediciones.length + ' medición(es): ' + s.mediciones.map(function (m) { return m.tipoMuestra || '(sin tipo)'; }).join(', ')) : 'Servicio nuevo — todavía sin mediciones registradas') +
         (s.fechaMuestreo ? ' · Muestreo ' + s.fechaMuestreo : '') + '</div></div>' +
         '<div class="servicio-right">' +
-        (s.presupuestoGH && s.esNuevo ? '<span class="progreso">Checklist ' + progreso.listos + '/' + progreso.total + '</span>' : '') +
+        (s.presupuestoGH && !s.checklist.terminadoManual ? '<span class="progreso">Checklist ' + progreso.listos + '/' + progreso.total + '</span>' : '') +
         '<span class="badge ' + etapa.color + '"><span class="dot ' + etapa.color + '"></span>' + etapa.label + '</span>' +
         '<span class="chev">▶</span></div>';
 
