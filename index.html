@@ -527,7 +527,8 @@
         var detalle = s.empresa + (s.presupuestoGH ? ' — presupuesto ' + s.presupuestoGH : '') +
           (s.mediciones.length ? '\n' + s.mediciones.length + ' medición(es) en la planilla' : '');
         if (!confirm('¿Eliminar esta medición?\n\n' + detalle +
-          '\n\nSe borra de la planilla y del checklist. Los archivos ya generados en Drive no se tocan.')) return;
+          '\n\nSe borra de la planilla, del checklist, y la carpeta de la medición va a la papelera ' +
+          '(con la OT, las CC y las fotos).\nLa carpeta de la empresa no se toca.')) return;
         borrarBtn.disabled = true;
         callBackend('eliminarServicio', {
           claveServicio: s.claveServicio || '',
@@ -539,6 +540,9 @@
           delete openKeys[key];
           SERVICIOS = data.servicios;
           render();
+          if (data.carpeta && !data.carpeta.borrada && data.carpeta.motivo !== 'sin_carpeta') {
+            avisar('Se eliminó la medición, pero la carpeta no se borró (' + data.carpeta.motivo + '). Revisala a mano.', 'error');
+          }
         }).catch(function () {
           borrarBtn.disabled = false;
           alert('No se pudo conectar con el backend.');
